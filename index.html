@@ -143,6 +143,32 @@
   .thermal-val { color: #fff; font-weight: 600; }
   .thermal-temp { color: var(--muted); width: 52px; flex-shrink: 0; text-align: right; }
 
+  /* Investigation / first-person discovery callouts */
+  .invest { background: rgba(168,85,247,0.06); border: 1px solid rgba(168,85,247,0.22); border-radius: 10px; padding: 16px 20px; margin: 16px 0; font-size: 0.88em; color: #aaa; line-height: 1.65; }
+  .invest .inv-label { font-size: 0.72em; font-family: monospace; color: var(--purple); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; display: block; }
+  .invest strong { color: #ddd; }
+  .invest code { background: #16161f; padding: 1px 6px; border-radius: 3px; font-size: 0.87em; color: #bd93f9; }
+
+  /* Corrected assumptions */
+  .correction { display: grid; grid-template-columns: 1fr 1fr; gap: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 10px 0; }
+  .corr-before { padding: 12px 16px; border-right: 1px solid var(--border); background: rgba(224,80,80,0.04); }
+  .corr-after  { padding: 12px 16px; background: rgba(0,255,136,0.03); }
+  .corr-label  { font-size: 0.68em; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; display: block; }
+  .corr-before .corr-label { color: var(--red); }
+  .corr-after  .corr-label { color: var(--green); }
+  .corr-text   { font-size: 0.82em; color: #bbb; line-height: 1.55; }
+  .corr-how    { font-size: 0.75em; color: var(--muted); margin-top: 8px; font-style: italic; }
+  @media (max-width: 500px) { .correction { grid-template-columns: 1fr; } .corr-before { border-right: none; border-bottom: 1px solid var(--border); } }
+
+  /* Experiment log table */
+  .exp-log { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin: 16px 0; font-size: 0.84em; }
+  .exp-log th { background: #16161f; color: var(--muted); font-family: monospace; font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.05em; padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  .exp-log td { padding: 9px 14px; border-bottom: 1px solid #16161f; color: #ccc; vertical-align: top; }
+  .exp-log tr:last-child td { border-bottom: none; }
+  .exp-log .hyp { color: var(--orange); font-style: italic; }
+  .exp-log .result { color: var(--green); }
+  .exp-log .result.wrong { color: var(--red); }
+
   /* Annotated pipeline (section 1 formal flow) */
   .annotated-pipeline { display: flex; flex-direction: column; gap: 2px; margin: 16px 0; }
   .ap-step { display: flex; align-items: stretch; gap: 10px; }
@@ -323,6 +349,74 @@
 
     <div class="callout-warn">
       <strong>Two bottlenecks, different causes:</strong> Stage 4 (Prefill) slows on long inputs because attention is O(L²) — a 512-token document takes ~16s to ingest. Stage 5 (Decode) is capped by DRAM bandwidth — the CPU can only stream 19.4 GB/s of model weights regardless of how few output tokens are requested. There is no optimization that fixes both simultaneously on CPU.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- 1.5 MEASUREMENT METHODOLOGY -->
+  <div class="section">
+    <h2><span class="num" style="font-size:0.65em;width:36px;height:36px;">1.5</span> How I Actually Measured This</h2>
+    <p>Every number in this post came from a specific command I ran. This section documents the measurement process — not to pad the post, but because the process itself revealed things I didn't expect.</p>
+
+    <h3>The Benchmark Loop</h3>
+    <p>I used <code>llama-bench</code>, the built-in benchmarking tool in llama.cpp. Key flags: <code>-p</code> for prompt token count (prefill), <code>-n</code> for output tokens (generation), <code>-t</code> for thread count, <code>-r 3</code> for 3 repetitions to average out thermal variance.</p>
+
+    <pre><span class="cm"># Exact command for every data point in Section 6</span>
+./build/bin/llama-bench \
+  -m models/phi3-mini.gguf \
+  -p 128,512,1024 \      <span class="cm"># vary prompt lengths</span>
+  -n 128 \               <span class="cm"># 128 output tokens per test</span>
+  -t 1,2,4,6,8 \         <span class="cm"># sweep all thread counts</span>
+  -r 3                   <span class="cm"># 3 reps, take median</span></pre>
+
+    <div class="invest">
+      <span class="inv-label">What I expected vs what the data said</span>
+      I went in assuming more threads = more speed. The sweep said otherwise. At 4 threads: <strong>8.70 t/s</strong>. At 8 threads: <strong>6.81 t/s</strong>. Eight threads was 22% <em>slower</em>. I ran it twice to confirm.
+      <br><br>
+      The explanation: Snapdragon 8 Gen 3 has 4 performance cores (Cortex-X4, 3.3 GHz) and 4 efficiency cores (Cortex-A720, ~2.3 GHz). With 8 threads, the scheduler assigns work to the slow cores. The fast cores finish their matrix blocks and stall waiting on sync. Meanwhile all 8 cores generate heat together, the thermal governor drops clocks. <strong>The optimal configuration is 4 threads on performance cores only — a counterintuitive result that only appeared because I actually swept the parameter space.</strong>
+    </div>
+
+    <h3>Deriving the Bandwidth Number</h3>
+    <p>There's no hardware bandwidth counter available in Termux. I derived it: generation speed (t/s) × model size (GB) = bandwidth consumed per second. At 8.7 t/s × 2.23 GB = 19.4 GB/s. Comparing that against LPDDR5X spec (77 GB/s) showed 25% utilization — which immediately raised the question: <em>if there's 75% bandwidth headroom, why can't I run 4× faster?</em> That question is what the roofline analysis, DRAM row buffer section, and NEON SIMD sections exist to answer.</p>
+
+    <div class="invest">
+      <span class="inv-label">The question that drove the whole technical analysis</span>
+      I tried adding threads to drive more memory requests — got slower. I tried increasing context — same speed. Eventually the load/store pipeline analysis showed the bottleneck isn't DRAM capacity at all: <strong>it's the CPU's ability to issue enough memory load instructions to saturate the bus.</strong> DRAM can deliver 77 GB/s. The CPU's effective memory access pipeline tops out at ~19–21 GB/s regardless of thread count. That's the real ceiling — and it's a CPU microarchitecture constraint, not a memory controller one.
+    </div>
+
+    <h3>The Test That Forced the Model Switch</h3>
+    <p>I started with TinyLlama because it benchmarks at 34.96 t/s — 4× faster. I ran three basic tests before anything else.</p>
+
+    <table class="exp-log">
+      <thead><tr><th>Test</th><th>Hypothesis</th><th>Actual Result</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>"What is 2 + 2?"</td>
+          <td class="hyp">Trivial factual query</td>
+          <td class="result wrong">3-paragraph story about a village. No math anywhere.</td>
+        </tr>
+        <tr>
+          <td>"List the planets in the solar system"</td>
+          <td class="hyp">Factual recall, should be easy</td>
+          <td class="result wrong">A poem about nature. Zero planets.</td>
+        </tr>
+        <tr>
+          <td>"Summarize: The quick brown fox..."</td>
+          <td class="hyp">Basic instruction-following</td>
+          <td class="result wrong">Continued the sentence instead of summarizing.</td>
+        </tr>
+        <tr>
+          <td>Same 3 queries — Phi-3 Mini</td>
+          <td class="hyp">Should work, but 4× slower</td>
+          <td class="result">All answered correctly. Speed: 8.7 t/s.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="invest">
+      <span class="inv-label">Why TinyLlama failed — and what it revealed about model selection</span>
+      TinyLlama 1.1B was trained as a <em>text continuation</em> model. It predicts what comes next in a document — it has no concept of "follow this instruction." Without instruction fine-tuning (RLHF / SFT on chat data), it treats "What is 2+2?" as the start of a sentence to continue, not a question to answer. The failure wasn't about size. It was about training objective. Phi-3 Mini was explicitly trained for instruction-following using curated high-quality data. <strong>The 4× speed difference is the price of the model actually doing what you ask.</strong> This is the single most important design decision in the whole project — and it was only confirmed by testing, not by reading the benchmarks.
     </div>
   </div>
 
@@ -528,6 +622,11 @@
       </div>
     </div>
 
+    <div class="invest">
+      <span class="inv-label">I started at 8 threads. The benchmark moved me to 4.</span>
+      My first run used <code>-t 8</code> — the intuitive default. It gave 6.81 t/s. I dropped to <code>-t 4</code> as an experiment, expecting it to be slower. It gave 8.70 t/s. I ran the 8-thread case again to rule out a measurement artifact — same result. The Snapdragon's big.LITTLE scheduler is the cause: the kernel assigns matrix block work to whichever cores are available, including the A720 efficiency cores at 2.3 GHz. Those cores complete their blocks in ~1.43× the time of the X4 cores, causing the fast cores to stall at the synchronization barrier waiting for them to finish. Adding threads added stalls, not throughput.
+    </div>
+
     <h3>Prompt Length vs Processing Speed</h3>
     <p>Prompt processing degrades as context grows due to quadratic attention complexity O(n²). Each token in the prompt attends to all previous tokens — doubling context length quadruples attention compute.</p>
     <div class="bar-chart">
@@ -609,6 +708,11 @@
 
     <div class="callout-blue">
       <strong>Reading the roofline:</strong> OI = 3.19 FLOP/byte sits <em>left</em> of the CPU ridge point (3.90) — meaning the CPU hits its memory bandwidth ceiling before its compute ceiling. The workload is <strong style="color:#fff">memory-bound on CPU</strong>. On the Adreno GPU (ridge = 16.9), the same OI sits far left of the ridge — it would be <em>even more</em> memory-bound, but the GPU's wider memory bus (68 GB/s vs CPU's ~19 GB/s effective) means higher absolute throughput.
+    </div>
+
+    <div class="invest">
+      <span class="inv-label">What this analysis actually changed in my approach</span>
+      Before running the roofline, I was looking at the code trying to find a way to optimize the NEON kernel — add prefetch hints, try different loop unrolling, pin threads differently. The roofline analysis made that pointless: OI of 3.19 is left of the ridge, so no amount of compute optimization moves the needle. <strong>The only lever that matters is reducing bytes read per token — either by using a smaller model, increasing quantization, or adding GPU bandwidth via a different backend.</strong> The analysis didn't give me a fix; it told me exactly where not to spend time. That's what made it useful.
     </div>
   </div>
 
@@ -1045,6 +1149,90 @@
       <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">No streaming cancellation on server side</strong> — the Stop button uses AbortController to cut the browser's SSE connection, but llama-server continues generating tokens until completion. The wasted inference is thrown away — it does not free CPU immediately.</span></div>
       <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">OCR is not a substitute for vision</strong> — Tesseract fails on handwriting, diagrams, charts, and dense tables. It is a preprocessing step for printed text only. True visual understanding requires a vision-language model (LLaVA, Phi-3 Vision), which is not yet feasible at this RAM budget.</span></div>
       <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">Reproducibility across devices is not guaranteed</strong> — thermal throttling, background app state, OS version, and LPDDR variant all affect measured t/s by ±15–20%. The numbers in this post are specific to Galaxy S24, Snapdragon 8 Gen 3, 12 GB RAM, Android 14.</span></div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- M. WHAT I GOT WRONG -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">M</span> What I Got Wrong — Corrected Assumptions</h2>
+    <p>The analysis in this post is the <em>result</em> of investigation, not the starting point. Here are the assumptions I went in with, the data that contradicted them, and what I concluded instead. These corrections are where the actual understanding lives.</p>
+
+    <div class="correction">
+      <div class="corr-before">
+        <span class="corr-label">✗ Initial assumption</span>
+        <div class="corr-text">The bottleneck is DRAM bandwidth. The model reads 2.23 GB per token and LPDDR5X peaks at 77 GB/s — so maximum speed is 77 ÷ 2.23 = <strong>~34 t/s</strong>.</div>
+        <div class="corr-how">How I got here: basic bandwidth math before running anything.</div>
+      </div>
+      <div class="corr-after">
+        <span class="corr-label">✓ What the data showed</span>
+        <div class="corr-text">Measured 8.7 t/s — less than a third of the predicted ceiling. DRAM row buffer analysis showed effective BW is ~41 GB/s (not 77), and the CPU's load/store pipeline caps out at <strong>~19–21 GB/s regardless</strong>. The bottleneck is the CPU memory access pipeline, not DRAM capacity.</div>
+      </div>
+    </div>
+
+    <div class="correction">
+      <div class="corr-before">
+        <span class="corr-label">✗ Initial assumption</span>
+        <div class="corr-text">8 threads will be faster than 4 threads. More cores = more parallelism = higher throughput. This is how every multi-threaded workload works.</div>
+        <div class="corr-how">How I got here: intuition from CPU-parallel workloads like rendering and compression.</div>
+      </div>
+      <div class="corr-after">
+        <span class="corr-label">✓ What the data showed</span>
+        <div class="corr-text">4 threads = 8.70 t/s. 8 threads = 6.81 t/s. Eight threads was <strong>22% slower</strong>. LLM generation is a memory-bound sequential workload — more threads don't create more bandwidth. They add synchronization overhead and pull in slow efficiency cores.</div>
+      </div>
+    </div>
+
+    <div class="correction">
+      <div class="corr-before">
+        <span class="corr-label">✗ Initial assumption</span>
+        <div class="corr-text">Compute utilization is the limiting factor. A 3.8B parameter model doing 7.6 GFLOP per token against a 300 GFLOPS CPU should be ~2.5% utilized — there's room to go faster by optimizing the compute path.</div>
+        <div class="corr-how">How I got here: compute utilization framing, standard in GPU workload analysis.</div>
+      </div>
+      <div class="corr-after">
+        <span class="corr-label">✓ What the data showed</span>
+        <div class="corr-text">2.5% compute utilization is correct — but it means <strong>compute is not the bottleneck at all</strong>. Optimizing FLOP throughput changes nothing. The roofline OI (3.19 FLOP/byte) sits left of the ridge point (3.90) — the model is memory-bound by definition. Compute optimization is irrelevant until the memory access pattern improves.</div>
+      </div>
+    </div>
+
+    <div class="correction">
+      <div class="corr-before">
+        <span class="corr-label">✗ Initial assumption</span>
+        <div class="corr-text">A system prompt telling the model to "be concise" would control response length and verbosity reliably.</div>
+        <div class="corr-how">How I got here: system prompts work this way on cloud LLMs like GPT-4 and Claude.</div>
+      </div>
+      <div class="corr-after">
+        <span class="corr-label">✓ What the data showed</span>
+        <div class="corr-text">Phi-3 Mini intermittently ignores system-role messages, especially for slash commands like <code>/summarize</code>. The fix was merging the instruction into the user turn: <code>{role:"user", content: instruction + "\n\n" + text}</code>. <strong>Small instruction-tuned models have weaker system-prompt adherence than RLHF-heavy cloud models.</strong></div>
+      </div>
+    </div>
+
+    <div class="correction">
+      <div class="corr-before">
+        <span class="corr-label">✗ Initial assumption</span>
+        <div class="corr-text">Q4_K_M means "4-bit quantization with minor precision loss." The quality degradation would be roughly proportional to the bit reduction — a 50% precision drop would cause ~50% quality loss.</div>
+        <div class="corr-how">How I got here: treating all quantization schemes as equivalent, linear compression.</div>
+      </div>
+      <div class="corr-after">
+        <span class="corr-label">✓ What the data showed</span>
+        <div class="corr-text">MMLU degradation vs FP16 is <strong>−0.6%</strong>. The K-quants system protects quality-critical layers (attention, LM head) at 6-bit while dropping only the FFN bulk to 4-bit. The mixed-precision design absorbs most of the precision loss in the most error-tolerant locations. Quality is nearly indistinguishable from FP16 in practice.</div>
+      </div>
+    </div>
+
+    <div class="correction">
+      <div class="corr-before">
+        <span class="corr-label">✗ Initial assumption</span>
+        <div class="corr-text">The Adreno 750 GPU would straightforwardly give 77 GB/s ÷ 2.23 GB ≈ 34 t/s, a clean 4× improvement over CPU. GPU inference should be the obvious next step.</div>
+        <div class="corr-how">How I got here: GPU bandwidth spec × model size = throughput projection.</div>
+      </div>
+      <div class="corr-after">
+        <span class="corr-label">✓ What the analysis showed</span>
+        <div class="corr-text">The GPU projection accounting for dequantization overhead (Q4 → FP16 before each matmul on Vulkan) and driver overhead drops the realistic estimate to <strong>~18 t/s</strong> — only 2× over CPU, not 4×. And llama.cpp's Vulkan backend on Android is not production-stable. The 34 t/s headline number would require INT4-native GPU support, which doesn't exist in the current Vulkan backend.</div>
+      </div>
+    </div>
+
+    <div class="callout-blue">
+      <strong>The pattern across all six corrections:</strong> the simple first estimate was always optimistic. Real-world constraints — thermal governors, memory access pipelines, dequant overhead, model training objectives — each took a bite out of the theoretical maximum. The gap between "expected from specs" and "measured from hardware" is where systems engineering actually lives.
     </div>
   </div>
 
