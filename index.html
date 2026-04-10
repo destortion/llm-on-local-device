@@ -131,6 +131,19 @@
   .cmd-name { color: var(--accent); font-family: monospace; font-size: 0.85em; font-weight: bold; white-space: nowrap; }
   .cmd-desc { color: #888; font-size: 0.83em; }
 
+  /* Comparison table */
+  .compare-table { width: 100%; border-collapse: collapse; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin: 20px 0; font-size: 0.88em; }
+  .compare-table th { padding: 10px 14px; text-align: left; font-family: monospace; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+  .compare-table th.tiny { background: #1a1208; color: var(--orange); }
+  .compare-table th.phi { background: #0d1a2a; color: var(--accent); }
+  .compare-table th.metric { background: #16161f; color: var(--muted); }
+  .compare-table td { padding: 10px 14px; border-bottom: 1px solid #16161f; color: #ccc; }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table .tiny-val { color: var(--orange); font-family: monospace; font-weight: 600; }
+  .compare-table .phi-val { color: var(--accent); font-family: monospace; font-weight: 600; }
+  .compare-table .win { color: var(--green); font-family: monospace; font-weight: 600; }
+  .compare-table tr:hover td { background: #13131a; }
+
   /* Lessons */
   .lesson { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--purple); border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 12px 0; font-size: 0.9em; }
   .lesson strong { color: var(--purple); display: block; margin-bottom: 4px; }
@@ -384,11 +397,94 @@ pip install pytesseract pillow
     </div>
   </div>
 
+  <!-- MODEL COMPARISON -->
+  <div class="section">
+    <h2><span class="num">7</span> TinyLlama vs Phi-3 Mini — Real Numbers</h2>
+    <p>I started with TinyLlama 1.1B before switching to Phi-3 Mini 3.8B. Here's what the actual benchmarks show — and why speed alone doesn't tell the full story.</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th class="metric">Metric</th>
+          <th class="tiny">🟠 TinyLlama 1.1B</th>
+          <th class="phi">🔵 Phi-3 Mini 3.8B</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Parameters</td>
+          <td class="tiny-val">1.10 B</td>
+          <td class="phi-val">3.82 B</td>
+        </tr>
+        <tr>
+          <td>Model size (Q4_K_M)</td>
+          <td class="tiny-val">636 MiB</td>
+          <td class="phi-val">2.23 GiB</td>
+        </tr>
+        <tr>
+          <td>Prompt processing pp128 · 4 threads</td>
+          <td class="win">116.92 t/s ✓</td>
+          <td class="phi-val">28.54 t/s</td>
+        </tr>
+        <tr>
+          <td>Prompt processing pp512 · 4 threads</td>
+          <td class="win">109.78 t/s ✓</td>
+          <td class="phi-val">22.65 t/s</td>
+        </tr>
+        <tr>
+          <td>Token generation tg128 · 4 threads</td>
+          <td class="win">34.96 t/s ✓</td>
+          <td class="phi-val">8.70 t/s</td>
+        </tr>
+        <tr>
+          <td>Prompt processing pp128 · 8 threads</td>
+          <td class="tiny-val">56.67 t/s</td>
+          <td class="phi-val">—</td>
+        </tr>
+        <tr>
+          <td>Token generation tg128 · 8 threads</td>
+          <td class="tiny-val">13.70 t/s</td>
+          <td class="phi-val">6.81 t/s</td>
+        </tr>
+        <tr>
+          <td>Response quality</td>
+          <td style="color:#e05050; font-family:monospace;">Poor — random outputs</td>
+          <td class="win">Good — coherent ✓</td>
+        </tr>
+        <tr>
+          <td>Instruction following</td>
+          <td style="color:#e05050; font-family:monospace;">Unreliable</td>
+          <td class="win">Reliable ✓</td>
+        </tr>
+        <tr>
+          <td>Optimal thread count</td>
+          <td class="tiny-val">4 threads</td>
+          <td class="phi-val">4 threads</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="bar-chart">
+      <div class="bar-row">
+        <div class="bar-label"><span>TinyLlama — generation speed (4t)</span><span class="bar-num" style="color:var(--orange)">34.96 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%; background: linear-gradient(90deg, var(--orange), #fdba74);"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>Phi-3 Mini — generation speed (4t)</span><span class="bar-num">8.70 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:25%"></div></div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>The verdict:</strong> TinyLlama is 4× faster at generation and uses 3.5× less RAM. But if you ask it "hi" it tells you a random story. Phi-3 Mini is slower and heavier — but it actually <em>works</em>. For a real assistant, quality beats speed every time.
+    </div>
+  </div>
+
   <hr>
 
   <!-- LESSONS -->
   <div class="section">
-    <h2><span class="num">7</span> What I Learned</h2>
+    <h2><span class="num">8</span> What I Learned</h2>
 
     <div class="lesson">
       <strong>Model size isn't everything</strong>
@@ -412,7 +508,7 @@ pip install pytesseract pillow
 
   <!-- TRY IT -->
   <div class="section" style="text-align:center;">
-    <h2 style="justify-content:center;"><span class="num">8</span> Try It Yourself</h2>
+    <h2 style="justify-content:center;"><span class="num">9</span> Try It Yourself</h2>
     <p>The full stack runs on any Android phone with Termux. No special hardware required.</p>
     <pre style="text-align:left;max-width:480px;margin:20px auto;">
 <span class="cm"># 1. Install Termux from F-Droid</span>
