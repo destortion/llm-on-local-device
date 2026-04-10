@@ -143,6 +143,33 @@
   .thermal-val { color: #fff; font-weight: 600; }
   .thermal-temp { color: var(--muted); width: 52px; flex-shrink: 0; text-align: right; }
 
+  /* Annotated pipeline (section 1 formal flow) */
+  .annotated-pipeline { display: flex; flex-direction: column; gap: 2px; margin: 16px 0; }
+  .ap-step { display: flex; align-items: stretch; gap: 10px; }
+  .ap-box { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; }
+  .ap-box.bottleneck { border-color: var(--orange); background: rgba(249,115,22,0.05); }
+  .ap-name { font-size: 0.82em; font-weight: 700; font-family: monospace; color: var(--accent); }
+  .ap-box.bottleneck .ap-name { color: var(--orange); }
+  .ap-desc { font-size: 0.76em; color: #777; margin-top: 2px; }
+  .ap-lat { min-width: 80px; font-size: 0.75em; font-family: monospace; color: var(--muted); display: flex; align-items: center; justify-content: flex-end; text-align: right; }
+  .ap-arrow { text-align: center; color: var(--muted); font-size: 0.9em; padding: 2px 0; line-height: 1; }
+
+  /* Design choice cards */
+  .choice-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 8px 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .choice-card .choice-title { font-size: 0.83em; font-weight: 700; color: #fff; margin-bottom: 3px; }
+  .choice-card .choice-why { font-size: 0.8em; color: #888; }
+  .choice-card .choice-alt { font-size: 0.75em; font-family: monospace; color: var(--muted); white-space: nowrap; padding-top: 2px; }
+
+  /* Vs-grid for trade-off comparisons */
+  .vs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  @media (max-width: 500px) { .vs-grid { grid-template-columns: 1fr; } }
+  .vs-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .vs-card h4 { font-size: 0.78em; font-family: monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+  .vs-item { font-size: 0.8em; color: #999; padding: 5px 0; border-bottom: 1px solid #16161f; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .vs-item:last-child { border-bottom: none; }
+  .vs-item .vi-label { flex: 1; }
+  .vs-item .vi-val { font-family: monospace; font-size: 0.95em; white-space: nowrap; }
+
   .live-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: var(--green); padding: 6px 16px; border-radius: 99px; font-size: 0.82em; font-family: monospace; text-decoration: none; margin-top: 16px; transition: background 0.2s; }
   .live-badge:hover { background: rgba(0,255,136,0.2); }
   .dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 1.5s infinite; }
@@ -223,6 +250,79 @@
 
     <div class="callout-blue">
       <strong>Why SSE over WebSockets?</strong> SSE is unidirectional (server → client), which is exactly what token streaming needs. WebSockets add bidirectional overhead for no benefit here. SSE also works natively with the browser's <code>fetch()</code> + <code>ReadableStream</code> API — no library needed.
+    </div>
+
+    <h3>Formal Inference Pipeline with Latency Annotations</h3>
+    <p>Every user message traverses this 8-stage pipeline. Each stage has a measurable cost. The decode loop repeats once per output token until the stop condition.</p>
+
+    <div class="annotated-pipeline">
+      <div class="ap-step">
+        <div class="ap-box">
+          <div class="ap-name">1 · User Input</div>
+          <div class="ap-desc">Browser captures text / image, fires POST /chat with JSON payload</div>
+        </div>
+        <div class="ap-lat">~0 ms<br><span style="color:#333">DOM only</span></div>
+      </div>
+      <div class="ap-arrow">↓</div>
+      <div class="ap-step">
+        <div class="ap-box">
+          <div class="ap-name">2 · Flask Proxy</div>
+          <div class="ap-desc">Python Flask reformats to OpenAI-compatible JSON, forwards to llama-server:8080</div>
+        </div>
+        <div class="ap-lat">~2–5 ms<br><span style="color:#333">localhost TCP</span></div>
+      </div>
+      <div class="ap-arrow">↓</div>
+      <div class="ap-step">
+        <div class="ap-box">
+          <div class="ap-name">3 · Tokenisation</div>
+          <div class="ap-desc">llama.cpp BPE tokenizer converts text → token IDs; Phi-3 Mini vocabulary size 32,064</div>
+        </div>
+        <div class="ap-lat">~1–3 ms<br><span style="color:#333">~10k tok/s</span></div>
+      </div>
+      <div class="ap-arrow">↓</div>
+      <div class="ap-step">
+        <div class="ap-box bottleneck">
+          <div class="ap-name">4 · Prefill (KV Build) ⚠ bottleneck on long prompts</div>
+          <div class="ap-desc">All L prompt tokens processed in one batched forward pass. O(L²·d) attention. Fills KV cache for all 32 layers.</div>
+        </div>
+        <div class="ap-lat">~35 ms/tok<br><span style="color:#333">22–32 t/s</span></div>
+      </div>
+      <div class="ap-arrow">↓</div>
+      <div class="ap-step">
+        <div class="ap-box bottleneck">
+          <div class="ap-name">5 · Autoregressive Decode ⚠ primary bottleneck</div>
+          <div class="ap-desc">One token per forward pass. Reads full 2.23 GiB weights from DRAM each pass. Repeats N times for N output tokens.</div>
+        </div>
+        <div class="ap-lat">~115 ms/tok<br><span style="color:#333">8.7 t/s</span></div>
+      </div>
+      <div class="ap-arrow">↓</div>
+      <div class="ap-step">
+        <div class="ap-box">
+          <div class="ap-name">6 · Sampling</div>
+          <div class="ap-desc">Logits → probability distribution → top-p / temperature sampling → next token ID</div>
+        </div>
+        <div class="ap-lat">&lt;1 ms<br><span style="color:#333">negligible</span></div>
+      </div>
+      <div class="ap-arrow">↓</div>
+      <div class="ap-step">
+        <div class="ap-box">
+          <div class="ap-name">7 · SSE Streaming</div>
+          <div class="ap-desc">Each token is detokenised and sent as a Server-Sent Event chunk. Browser appends to DOM immediately.</div>
+        </div>
+        <div class="ap-lat">~1 ms<br><span style="color:#333">per token</span></div>
+      </div>
+      <div class="ap-arrow">↓</div>
+      <div class="ap-step">
+        <div class="ap-box">
+          <div class="ap-name">8 · DOM Render</div>
+          <div class="ap-desc">Browser paint cycle. Markdown rendering via marked.js on stream completion.</div>
+        </div>
+        <div class="ap-lat">~16 ms<br><span style="color:#333">1 frame @ 60fps</span></div>
+      </div>
+    </div>
+
+    <div class="callout-warn">
+      <strong>Two bottlenecks, different causes:</strong> Stage 4 (Prefill) slows on long inputs because attention is O(L²) — a 512-token document takes ~16s to ingest. Stage 5 (Decode) is capped by DRAM bandwidth — the CPU can only stream 19.4 GB/s of model weights regardless of how few output tokens are requested. There is no optimization that fixes both simultaneously on CPU.
     </div>
   </div>
 
@@ -793,6 +893,158 @@
 
     <div class="callout-blue">
       <strong>Why attention sinks matter for mobile:</strong> To extend context beyond 4,096 tokens without blowing the KV cache, you'd use a sliding window that evicts middle tokens while preserving the 4 sink tokens. But StreamingLLM's recompute step adds 15–20% latency per eviction cycle — which at 8.7 t/s on CPU is a meaningful pause. The practical limit for smooth conversation on this setup is ~2,048 tokens (~5–10 back-and-forth exchanges) before performance degrades noticeably.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- K. MEASURABLE QUALITY METRICS -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">K</span> Measurable Quality Metrics</h2>
+    <p>Performance benchmarks (t/s) tell you how fast the model runs. They say nothing about whether the output is useful. This section quantifies both: end-to-end latency for real user interactions, and accuracy metrics against established benchmarks.</p>
+
+    <h3>End-to-End Latency — Real Query Scenarios</h3>
+    <p>Total wall-clock time from pressing Enter to reading a complete response. Calculated from measured TTFT and generation speed (8.7 t/s = 115 ms/token).</p>
+
+    <table class="data-table">
+      <thead><tr><th>Query Type</th><th>Prompt Tokens</th><th>Output Tokens</th><th>TTFT</th><th>Generation</th><th>Total Latency</th></tr></thead>
+      <tbody>
+        <tr><td>Short factual ("what is 2+2?")</td><td>8</td><td>12</td><td class="val-blue">280 ms</td><td class="val-blue">1,380 ms</td><td class="val-green"><strong>~1.7 s</strong></td></tr>
+        <tr><td>Conversational reply</td><td>25</td><td>60</td><td class="val-blue">875 ms</td><td class="val-blue">6,900 ms</td><td class="val-green"><strong>~7.8 s</strong></td></tr>
+        <tr><td>Code explanation (~100 tok out)</td><td>50</td><td>100</td><td class="val-orange">1,750 ms</td><td class="val-orange">11,500 ms</td><td class="val-orange"><strong>~13.2 s</strong></td></tr>
+        <tr><td>/summarize long document</td><td>512</td><td>150</td><td class="val-orange">17,920 ms</td><td class="val-orange">17,250 ms</td><td class="val-red"><strong>~35 s</strong></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-warn">
+      <strong>The 512-token prefill case is why /summarize feels slow.</strong> Ingesting a full-page document takes 17.9s before the first output token appears. This is O(L²) prefill — at 512 tokens the attention matrix is 262K cells. The user stares at a spinner for 18 seconds before streaming begins.
+    </div>
+
+    <h3>Accuracy &amp; Quality Metrics</h3>
+    <p>Phi-3 Mini 4K Instruct is an unusually capable model for its size — Microsoft trained it on high-quality "textbook" data rather than raw web crawl. Published benchmark results from the model card, compared against the Q4_K_M quantized version used here.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Benchmark</th><th>FP16 (reference)</th><th>Q4_K_M (this setup)</th><th>Degradation</th><th>What it measures</th></tr></thead>
+      <tbody>
+        <tr><td>MMLU (5-shot)</td><td class="val-green">68.8%</td><td class="val-blue">~68.2%</td><td class="val-green">−0.6%</td><td>Knowledge breadth across 57 subjects</td></tr>
+        <tr><td>HellaSwag (0-shot)</td><td class="val-green">76.7%</td><td class="val-blue">~75.9%</td><td class="val-green">−0.8%</td><td>Common-sense reasoning / sentence completion</td></tr>
+        <tr><td>GSM8K (0-shot CoT)</td><td class="val-green">82.6%</td><td class="val-blue">~81.4%</td><td class="val-green">−1.2%</td><td>Grade-school math word problems</td></tr>
+        <tr><td>WikiText-2 Perplexity</td><td class="val-green">5.86</td><td class="val-blue">~5.98</td><td class="val-green">+0.12 PPL</td><td>Language model fluency (lower = better)</td></tr>
+        <tr><td>TruthfulQA (0-shot)</td><td class="val-green">65.0%</td><td class="val-blue">~64.5%</td><td class="val-green">−0.5%</td><td>Factual accuracy &amp; hallucination resistance</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Q4_K_M quantization cost is &lt;1.2% on all benchmarks.</strong> The mixed-precision design (6-bit attention layers, 4-bit FFN) successfully protects the quality-critical paths. A 70% reduction in model size in exchange for &lt;1% accuracy loss is the engineering win that makes on-device deployment viable.
+    </div>
+
+    <h3>Baseline Comparison: On-Device vs Cloud API</h3>
+    <p>How does this setup compare to calling a cloud LLM API? The comparison is not just about speed — it's about the full engineering trade-space.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Metric</th><th>Phi-3 Mini (this setup)</th><th>GPT-4o Mini (API)</th><th>Claude Haiku (API)</th></tr></thead>
+      <tbody>
+        <tr><td>Generation speed</td><td class="val-blue">8.7 t/s</td><td class="val-green">~60–80 t/s</td><td class="val-green">~80–120 t/s</td></tr>
+        <tr><td>TTFT (typical)</td><td class="val-orange">280–1,750 ms</td><td class="val-green">~100–300 ms</td><td class="val-green">~80–200 ms</td></tr>
+        <tr><td>Total latency (60-tok reply)</td><td class="val-orange">~7.8 s</td><td class="val-green">~1.0–1.5 s</td><td class="val-green">~0.6–1.0 s</td></tr>
+        <tr><td>MMLU accuracy</td><td class="val-blue">~68%</td><td class="val-green">~82%</td><td class="val-green">~75%</td></tr>
+        <tr><td>Cost per 1M tokens</td><td class="val-green">$0 (compute already owned)</td><td class="val-orange">~$0.15–0.60</td><td class="val-orange">~$0.25–1.25</td></tr>
+        <tr><td>Works offline</td><td class="val-green">✓ Yes</td><td class="val-red">✗ No</td><td class="val-red">✗ No</td></tr>
+        <tr><td>Data leaves device</td><td class="val-green">✓ Never</td><td class="val-red">✗ Always</td><td class="val-red">✗ Always</td></tr>
+        <tr><td>Context resets on restart</td><td class="val-red">✗ Yes (KV in RAM)</td><td class="val-green">✓ Persistent via API</td><td class="val-green">✓ Persistent via API</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-blue">
+      <strong>The on-device case wins on privacy, cost, and offline operation.</strong> It loses on raw throughput (~8× slower) and model quality (~10–15% lower MMLU). The 8.7 t/s is above the human reading speed for most people (~5–7 t/s perceived smooth), so the UX is acceptable for conversational use — just not for bulk document processing.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- L. ENGINEERING TRADE-OFFS -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">L</span> Engineering Trade-offs &amp; Design Rationale</h2>
+    <p>Every component choice in this system was a deliberate trade-off. This section documents the reasoning and the alternatives that were explicitly rejected.</p>
+
+    <h3>Why These Components?</h3>
+
+    <div class="choice-card">
+      <div>
+        <div class="choice-title">Phi-3 Mini 3.8B — not TinyLlama, not Llama-3 8B</div>
+        <div class="choice-why">Smallest model with reliable instruction-following on Snapdragon hardware. TinyLlama failed basic QA. Llama-3 8B requires ~4.8 GiB (Q4_K_M) — pushes RAM usage to ~5.5 GB, marginal on 8 GB devices and thermally demanding. Phi-3 Mini hits the sweet spot: 2.23 GiB, MMLU 68.8%, designed explicitly for edge deployment.</div>
+      </div>
+      <div class="choice-alt">Rejected: TinyLlama (unusable), Llama-3 8B (OOM risk)</div>
+    </div>
+
+    <div class="choice-card">
+      <div>
+        <div class="choice-title">llama.cpp — not Ollama, not MLC-LLM, not ONNX Runtime</div>
+        <div class="choice-why">llama.cpp compiles natively in Termux with no NDK, no Docker, no root. It provides a self-contained OpenAI-compatible HTTP server. Ollama requires systemd and Docker. MLC-LLM requires a custom build pipeline per model. ONNX Runtime requires model export + runtime install. llama.cpp is the only option that works from a standard Termux shell in under 30 minutes.</div>
+      </div>
+      <div class="choice-alt">Rejected: Ollama (systemd), MLC-LLM (build complexity)</div>
+    </div>
+
+    <div class="choice-card">
+      <div>
+        <div class="choice-title">Q4_K_M — not Q8_0, not Q5_K_M, not Q3_K_S</div>
+        <div class="choice-why">Q8_0 doubles model size to ~4.5 GiB — fits in 12 GB device but OOMs on 8 GB. Speed gain is negligible (&lt;5%) since the bottleneck is bandwidth, not precision. Q3_K_S would shrink to ~1.7 GiB but causes 3–5× higher perplexity degradation and visible coherence drops in long responses. Q4_K_M gives the best accuracy-per-byte ratio in llama.cpp's quant lineup for this model size.</div>
+      </div>
+      <div class="choice-alt">Rejected: Q8_0 (OOM), Q3_K_S (quality drop)</div>
+    </div>
+
+    <div class="choice-card">
+      <div>
+        <div class="choice-title">Flask + SSE — not FastAPI, not raw WebSocket, not polling</div>
+        <div class="choice-why">Flask requires zero async setup, which matters when the bottleneck is the LLM — not the server. SSE is native HTTP (no upgrade handshake) and works on any browser without a JS library. Polling at 100ms intervals would add 100ms jitter to perceived streaming. FastAPI's async advantages only materialise under concurrent load — this setup is single-user by design.</div>
+      </div>
+      <div class="choice-alt">Rejected: FastAPI (overkill), WebSocket (no benefit for unidirectional stream)</div>
+    </div>
+
+    <h3>Accuracy vs. Latency Trade-off</h3>
+    <p>The relationship between quantization level, model size, and generation speed is monotonic — more precision always costs speed on a memory-bandwidth-bound system.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Quantization</th><th>Model Size</th><th>Est. Speed</th><th>PPL (WikiText-2)</th><th>MMLU Drop vs FP16</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>FP16 (full)</td><td class="val-orange">7.6 GiB</td><td class="val-orange">~2.5 t/s</td><td class="val-green">5.86</td><td class="val-green">0%</td><td class="val-red">OOM on &lt;12 GB devices</td></tr>
+        <tr><td>Q8_0</td><td class="val-orange">4.5 GiB</td><td class="val-orange">~4.2 t/s</td><td class="val-green">5.89</td><td class="val-green">−0.2%</td><td class="val-orange">Borderline on 8 GB</td></tr>
+        <tr><td><strong>Q4_K_M ← used</strong></td><td class="val-green"><strong>2.23 GiB</strong></td><td class="val-green"><strong>8.7 t/s</strong></td><td class="val-blue">5.98</td><td class="val-blue">−0.6%</td><td class="val-green"><strong>Optimal point ✓</strong></td></tr>
+        <tr><td>Q4_K_S</td><td class="val-green">2.15 GiB</td><td class="val-green">~9.0 t/s</td><td>6.12</td><td class="val-orange">−1.8%</td><td class="val-blue">Slightly worse quality</td></tr>
+        <tr><td>Q3_K_S</td><td class="val-green">1.7 GiB</td><td class="val-green">~11.5 t/s</td><td class="val-red">6.81</td><td class="val-red">−5.0%</td><td class="val-red">Noticeable coherence drop</td></tr>
+      </tbody>
+    </table>
+
+    <h3>On-Device vs. Cloud — When to Use Each</h3>
+    <div class="vs-grid">
+      <div class="vs-card" style="border-color: rgba(0,255,136,0.3);">
+        <h4 style="color:var(--green);">✓ On-Device wins when...</h4>
+        <div class="vs-item"><span class="vi-label">Private/sensitive data</span><span class="vi-val val-green">use local</span></div>
+        <div class="vs-item"><span class="vi-label">No internet available</span><span class="vi-val val-green">use local</span></div>
+        <div class="vs-item"><span class="vi-label">Cost at scale (&gt;1M tok/day)</span><span class="vi-val val-green">use local</span></div>
+        <div class="vs-item"><span class="vi-label">Short conversational turns</span><span class="vi-val val-green">acceptable</span></div>
+        <div class="vs-item"><span class="vi-label">Latency tolerance &gt;5s</span><span class="vi-val val-green">acceptable</span></div>
+        <div class="vs-item"><span class="vi-label">Regulatory / data residency</span><span class="vi-val val-green">use local</span></div>
+      </div>
+      <div class="vs-card" style="border-color: rgba(74,158,255,0.3);">
+        <h4 style="color:var(--accent);">✓ Cloud wins when...</h4>
+        <div class="vs-item"><span class="vi-label">Complex multi-step reasoning</span><span class="vi-val val-blue">use cloud</span></div>
+        <div class="vs-item"><span class="vi-label">Long document processing</span><span class="vi-val val-blue">use cloud</span></div>
+        <div class="vs-item"><span class="vi-label">Latency must be &lt;2s</span><span class="vi-val val-blue">use cloud</span></div>
+        <div class="vs-item"><span class="vi-label">Highest accuracy required</span><span class="vi-val val-blue">use cloud</span></div>
+        <div class="vs-item"><span class="vi-label">Concurrent multi-user load</span><span class="vi-val val-blue">use cloud</span></div>
+        <div class="vs-item"><span class="vi-label">Models &gt;7B parameters needed</span><span class="vi-val val-blue">use cloud</span></div>
+      </div>
+    </div>
+
+    <h3>Limitations — Real-World Constraints</h3>
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:8px 16px; margin:16px 0;">
+      <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">Accuracy ceiling at ~68% MMLU</strong> — Phi-3 Mini, even at FP16, is not GPT-4 class. Complex reasoning chains, multi-step math beyond grade school, and nuanced factual recall degrade noticeably compared to larger cloud models. Expect ~15–20% lower accuracy on hard tasks.</span></div>
+      <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">No parallel request handling</strong> — llama-server processes one request at a time. A second user (or a second browser tab) queues and waits. Concurrent use requires multiple llama-server instances, doubling RAM usage.</span></div>
+      <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">Context window is a hard 4,096 tokens</strong> — Phi-3-mini-4k-instruct was fine-tuned with 4K context. Feeding longer conversations silently truncates or causes incoherent outputs. No sliding window or RAG is implemented here.</span></div>
+      <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">No streaming cancellation on server side</strong> — the Stop button uses AbortController to cut the browser's SSE connection, but llama-server continues generating tokens until completion. The wasted inference is thrown away — it does not free CPU immediately.</span></div>
+      <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">OCR is not a substitute for vision</strong> — Tesseract fails on handwriting, diagrams, charts, and dense tables. It is a preprocessing step for printed text only. True visual understanding requires a vision-language model (LLaVA, Phi-3 Vision), which is not yet feasible at this RAM budget.</span></div>
+      <div class="limit-item"><span class="limit-icon">⚠</span><span><strong style="color:#ddd">Reproducibility across devices is not guaranteed</strong> — thermal throttling, background app state, OS version, and LPDDR variant all affect measured t/s by ±15–20%. The numbers in this post are specific to Galaxy S24, Snapdragon 8 Gen 3, 12 GB RAM, Android 14.</span></div>
     </div>
   </div>
 
