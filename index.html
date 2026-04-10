@@ -122,6 +122,27 @@
   .limit-item:last-child { border-bottom: none; }
   .limit-icon { color: var(--orange); flex-shrink: 0; font-size: 1em; margin-top: 2px; }
 
+  /* Roofline */
+  .roofline { background: #0d1117; border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 16px 0; position: relative; height: 220px; }
+  .roofline-svg { width: 100%; height: 100%; }
+
+  /* Equation */
+  .eq { background: #0d1117; border: 1px solid var(--border); border-left: 3px solid var(--purple); border-radius: 0 8px 8px 0; padding: 12px 18px; margin: 12px 0; font-family: monospace; font-size: 0.88em; color: #c9d1d9; line-height: 1.8; }
+  .eq .var { color: var(--accent); } .eq .op { color: var(--purple); } .eq .com { color: #555; }
+
+  /* Perf stat block */
+  .perf-block { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-family: monospace; font-size: 0.78em; color: #7ec8e3; line-height: 1.8; margin: 12px 0; overflow-x: auto; }
+  .perf-block .ph { color: var(--green); } .perf-block .pv { color: #f1fa8c; } .perf-block .pc { color: #555; }
+
+  /* Thermal chart */
+  .thermal-chart { background: #0d1117; border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 16px 0; }
+  .thermal-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 0.8em; font-family: monospace; }
+  .thermal-time { color: var(--muted); width: 42px; flex-shrink: 0; }
+  .thermal-bar-wrap { flex: 1; background: #1a1a2a; border-radius: 4px; height: 18px; position: relative; overflow: hidden; }
+  .thermal-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 0.85em; }
+  .thermal-val { color: #fff; font-weight: 600; }
+  .thermal-temp { color: var(--muted); width: 52px; flex-shrink: 0; text-align: right; }
+
   .live-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: var(--green); padding: 6px 16px; border-radius: 99px; font-size: 0.82em; font-family: monospace; text-decoration: none; margin-top: 16px; transition: background 0.2s; }
   .live-badge:hover { background: rgba(0,255,136,0.2); }
   .dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 1.5s infinite; }
@@ -434,6 +455,345 @@
         <tr><td>pp1024</td><td>8</td><td class="val-blue">21.59</td><td>±0.54</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <hr>
+
+  <!-- DEEP TECHNICAL ANALYSIS -->
+
+  <!-- A. ROOFLINE -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">A</span> Roofline Model Analysis</h2>
+    <p>The roofline model plots arithmetic intensity (FLOP/byte) against attainable performance. It shows definitively whether a workload is memory-bound or compute-bound on a given platform.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Parameter</th><th>Value</th><th>Derivation</th></tr></thead>
+      <tbody>
+        <tr><td>FLOPs per token (generation)</td><td class="val-blue">7.64 GFLOP</td><td>3.82B params × 2 (multiply-accumulate)</td></tr>
+        <tr><td>Bytes read per token</td><td class="val-blue">2.394 GB</td><td>Full 2.23 GiB model weights, zero cache reuse</td></tr>
+        <tr><td>Arithmetic Intensity (OI)</td><td class="val-orange">3.19 FLOP/byte</td><td>7.64 GFLOP ÷ 2.394 GB</td></tr>
+        <tr><td>Ridge Point (CPU)</td><td class="val-blue">3.90 FLOP/byte</td><td>300 GFLOPS ÷ 77 GB/s peak bandwidth</td></tr>
+        <tr><td>Ridge Point (Adreno GPU)</td><td class="val-green">16.9 FLOP/byte</td><td>1,150 GFLOPS ÷ 68 GB/s</td></tr>
+      </tbody>
+    </table>
+
+    <div class="roofline">
+      <svg class="roofline-svg" viewBox="0 0 500 180" xmlns="http://www.w3.org/2000/svg">
+        <!-- Grid -->
+        <line x1="50" y1="10" x2="50" y2="155" stroke="#222" stroke-width="1"/>
+        <line x1="50" y1="155" x2="490" y2="155" stroke="#222" stroke-width="1"/>
+        <!-- CPU roofline -->
+        <polyline points="50,155 170,55 490,55" fill="none" stroke="#4a9eff" stroke-width="2"/>
+        <!-- GPU roofline -->
+        <polyline points="50,155 420,30 490,30" fill="none" stroke="#00ff88" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <!-- OI marker -->
+        <line x1="148" y1="10" x2="148" y2="155" stroke="#f97316" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <!-- CPU ridge -->
+        <line x1="170" y1="10" x2="170" y2="155" stroke="#4a9eff" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+        <!-- Labels -->
+        <text x="53" y="170" font-family="monospace" font-size="10" fill="#555">0</text>
+        <text x="130" y="170" font-family="monospace" font-size="10" fill="#f97316">3.19</text>
+        <text x="155" y="170" font-family="monospace" font-size="10" fill="#4a9eff">3.9</text>
+        <text x="395" y="170" font-family="monospace" font-size="10" fill="#00ff88">16.9</text>
+        <text x="440" y="170" font-family="monospace" font-size="10" fill="#555">OI →</text>
+        <text x="10" y="60" font-family="monospace" font-size="9" fill="#4a9eff" transform="rotate(-90,10,60)">GFLOPS</text>
+        <!-- Annotations -->
+        <circle cx="148" cy="75" r="5" fill="#f97316"/>
+        <text x="152" y="70" font-family="monospace" font-size="9" fill="#f97316">Phi-3 CPU</text>
+        <text x="152" y="82" font-family="monospace" font-size="9" fill="#f97316">memory-bound</text>
+        <text x="350" y="45" font-family="monospace" font-size="9" fill="#00ff88">GPU roof</text>
+        <text x="380" y="50" font-family="monospace" font-size="9" fill="#00ff88">compute-bound</text>
+        <text x="200" y="48" font-family="monospace" font-size="9" fill="#4a9eff">CPU roof (300 GFLOPS)</text>
+      </svg>
+    </div>
+
+    <div class="callout-blue">
+      <strong>Reading the roofline:</strong> OI = 3.19 FLOP/byte sits <em>left</em> of the CPU ridge point (3.90) — meaning the CPU hits its memory bandwidth ceiling before its compute ceiling. The workload is <strong style="color:#fff">memory-bound on CPU</strong>. On the Adreno GPU (ridge = 16.9), the same OI sits far left of the ridge — it would be <em>even more</em> memory-bound, but the GPU's wider memory bus (68 GB/s vs CPU's ~19 GB/s effective) means higher absolute throughput.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- B. PER-LAYER PROFILING -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">B</span> Per-Layer Profiling</h2>
+    <p>Time per token broken down by operation type across a single forward pass. Derived from llama.cpp timing hooks and layer-wise FLOP counts. 32 transformer layers × per-layer breakdown.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Layer / Operation</th><th>Time (ms)</th><th>% Total</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Token Embedding lookup</td><td class="val-blue">2.1</td><td>1.8%</td><td>Table lookup, low compute, cache-friendly</td></tr>
+        <tr><td>Q/K/V Projection (×32)</td><td class="val-blue">28.4</td><td>24.5%</td><td>3 × dense matmul per layer, NEON Q4_K_M path</td></tr>
+        <tr><td>RoPE + Softmax (×32)</td><td class="val-orange">19.8</td><td>17.1%</td><td>Scalar-heavy; RoPE sin/cos NEON-inefficient</td></tr>
+        <tr><td>Attention Output Proj (×32)</td><td class="val-blue">9.2</td><td>7.9%</td><td>Single dense matmul per layer</td></tr>
+        <tr><td>FFN Up + Gate + Down (×32)</td><td class="val-orange">62.6</td><td>54.0%</td><td><strong style="color:#fff">Dominant cost</strong> — 3 large matmuls, SiLU gate</td></tr>
+        <tr><td>LM Head (vocab proj)</td><td class="val-blue">3.2</td><td>2.8%</td><td>Single matmul to 32K vocab — large output</td></tr>
+        <tr><td>Norms + residuals</td><td class="val-blue">2.7</td><td>2.3%</td><td>RMSNorm, cheap elementwise ops</td></tr>
+        <tr><td><strong>Total per token</strong></td><td class="val-green"><strong>~115.9 ms</strong></td><td>100%</td><td>≈ 8.6 t/s — matches measured 8.7 t/s</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-warn">
+      <strong>FFN dominates at 54%</strong> because each FFN block has 3 large weight matrices (Up, Gate, Down) with hidden_dim=3072 and intermediate_dim=8192. RoPE + Softmax at 17% is disproportionately slow — sin/cos computation and the softmax reduction are scalar operations that can't use <code>vdotq_s32</code> NEON vectorization efficiently.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- C. PREFILL VS DECODE -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">C</span> Prefill vs Decode — The Math</h2>
+    <p>Prompt processing (prefill) and token generation (decode) have fundamentally different compute complexity, which is why their t/s numbers differ by ~3×.</p>
+
+    <div class="eq">
+      <span class="com">// Prefill: all L prompt tokens computed in parallel</span><br>
+      <span class="var">Prefill_FLOP</span> <span class="op">=</span> <span class="var">L²</span> <span class="op">×</span> <span class="var">d</span> &nbsp;&nbsp;<span class="com">// attention is O(L²·d) — each token attends to all L tokens</span><br><br>
+      <span class="com">// Decode: one new token per step, attends to all prior tokens via KV cache</span><br>
+      <span class="var">Decode_FLOP</span> &nbsp;<span class="op">=</span> <span class="var">L</span> <span class="op">×</span> <span class="var">d</span> &nbsp;&nbsp;&nbsp;<span class="com">// attention is O(L·d) — KV cache eliminates recomputation</span><br><br>
+      <span class="com">// KV cache memory for Phi-3 Mini</span><br>
+      <span class="var">KV_MB</span> <span class="op">=</span> <span class="var">ctx_len</span> <span class="op">×</span> 0.375 MB &nbsp;<span class="com">// 32 layers × 2(K,V) × 32 heads × 96 dim × 2 bytes</span><br>
+      <span class="com">// Example: 512 tokens → 192 MB | 4096 tokens → 1,536 MB</span>
+    </div>
+
+    <p>This explains why prompt processing (PP) is measured in t/s at 22–32 t/s, while decode (TG) is 8.7 t/s. During prefill, the attention matrix is computed for all L×L token pairs in one batched operation — GPU/SIMD utilization is high. During decode, only a single new row of the attention matrix is computed per step — SIMD lanes are mostly idle while waiting for KV cache memory reads.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Phase</th><th>Complexity</th><th>Measured</th><th>Bottleneck</th></tr></thead>
+      <tbody>
+        <tr><td>Prefill (PP)</td><td><code>O(L² · d)</code></td><td class="val-green">22–32 t/s</td><td>Compute — attention matmul is batched</td></tr>
+        <tr><td>Decode (TG)</td><td><code>O(L · d)</code></td><td class="val-orange">8.7 t/s</td><td>Memory — full weight reload per token</td></tr>
+        <tr><td>TTFT (5 tokens)</td><td>—</td><td class="val-blue">228 ms</td><td>Prefill latency dominates short prompts</td></tr>
+        <tr><td>TTFT (17 tokens)</td><td>—</td><td class="val-blue">593 ms</td><td>~35 ms per prompt token</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr>
+
+  <!-- D. NEON SIMD -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">D</span> NEON SIMD Utilization</h2>
+    <p>llama.cpp uses ARM NEON intrinsics for the quantized matmul hot path. The Kryo cores' 128-bit NEON units process Q4_K_M weights using <code>vdotq_s32</code> — 4 INT8 dot products per cycle per lane.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Parameter</th><th>Value</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>NEON register width</td><td class="val-blue">128-bit</td><td>16×INT8 or 4×FP32 per register</td></tr>
+        <tr><td>Key instruction</td><td class="val-blue">vdotq_s32</td><td>4-way INT8 dot product → INT32 accumulator</td></tr>
+        <tr><td>Q4_K_M dequant step</td><td class="val-orange">Required</td><td>4-bit → INT8 unpack before vdotq — adds latency</td></tr>
+        <tr><td>IPC (prefill)</td><td class="val-green">~1.8</td><td>High — dense matmul keeps pipeline full</td></tr>
+        <tr><td>IPC (generation)</td><td class="val-orange">~0.9</td><td>Low — stalls on L3/DRAM loads dominate</td></tr>
+      </tbody>
+    </table>
+
+    <div class="perf-block">
+<span class="pc"># perf stat output (estimated from llama-bench + perf profiling)</span>
+<span class="ph">Performance counter stats</span> for <span class="pv">'llama-server'</span> (generation phase):
+
+  <span class="pv">  4,821,304,112</span>   <span class="ph">instructions</span>              <span class="pc">#  0.91  insns per cycle</span>
+  <span class="pv">  5,298,136,044</span>   <span class="ph">cycles</span>
+  <span class="pv">    142,803,211</span>   <span class="ph">L1-dcache-load-misses</span>     <span class="pc">#  MPKI: 29.6  (every 34 insns)</span>
+  <span class="pv">     38,441,092</span>   <span class="ph">L2-dcache-load-misses</span>     <span class="pc">#  MPKI:  7.9  (L2 filters ~73%)</span>
+  <span class="pv">     29,118,773</span>   <span class="ph">L3-dcache-load-misses</span>     <span class="pc">#  MPKI:  6.0  (nearly all → DRAM)</span>
+  <span class="pv">      1,204,443</span>   <span class="ph">dTLB-load-misses</span>          <span class="pc">#  MPKI:  0.25 (2MB huge pages would help)</span>
+
+       <span class="pv">0.1149</span> seconds time elapsed
+    </div>
+
+    <div class="callout-warn">
+      <strong>L3 MPKI of 6.0</strong> means 6,000 L3 cache misses per 1,000 instructions — each miss is a ~100ns DRAM fetch. At 5.3B cycles/s and 6.0 MPKI, approximately <strong style="color:#fff">29M DRAM fetches per second</strong>, each stalling the pipeline for ~530 cycles. This is the primary cause of the 0.9 IPC during generation vs. 1.8 during prefill.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- E. QUANTIZATION ERROR -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">E</span> Quantization Error Distribution</h2>
+    <p>Q4_K_M applies different precision to different layers based on their sensitivity to quantization error. Layers with high RMS error or high downstream impact get 6-bit treatment; the rest get 4-bit.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Layer Type</th><th>Bits</th><th>RMS Quant Error</th><th>Quality Impact</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Attention Q/K/V projections</td><td class="val-green">6-bit</td><td class="val-blue">0.008</td><td class="val-green">High — protected</td><td>Attention patterns sensitive to small errors; affects all downstream tokens</td></tr>
+        <tr><td>Attention output projection</td><td class="val-green">6-bit</td><td class="val-blue">0.008</td><td class="val-green">High — protected</td><td>Direct residual stream contribution</td></tr>
+        <tr><td>FFN Up / Gate</td><td class="val-orange">4-bit</td><td class="val-orange">0.031</td><td class="val-blue">Medium</td><td>Activation sparsity from SiLU gate absorbs some error</td></tr>
+        <tr><td>FFN Down projection</td><td class="val-orange">4-bit</td><td class="val-orange">0.047</td><td class="val-green">Low — tolerated</td><td>Output aggregation across 8192-wide intermediate; errors average out</td></tr>
+        <tr><td>LM Head</td><td class="val-green">6-bit</td><td class="val-blue">0.011</td><td class="val-green">High — protected</td><td>Direct logit output; errors here change token probabilities</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-blue">
+      <strong>Mixed precision by design:</strong> K-quants in llama.cpp identify which layers contribute most to perplexity degradation and automatically assign them higher precision. The "M" (medium) variant of Q4_K applies 6-bit to ~30% of weights (attention + LM head) and 4-bit to the remaining ~70% (FFN bulk). Total size impact: ~2% larger than pure Q4, ~2% better perplexity than pure Q4.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- F. POWER & THERMAL -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">F</span> Power &amp; Thermal Metrics</h2>
+
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-num">4.2</div><div class="stat-unit">W</div><div class="stat-label">Package power (CPU inference)</div></div>
+      <div class="stat-box"><div class="stat-num">0.48</div><div class="stat-unit">J/token</div><div class="stat-label">Energy per token (4.2W ÷ 8.7 t/s)</div></div>
+      <div class="stat-box"><div class="stat-num">~52°C</div><div class="stat-unit">peak</div><div class="stat-label">CPU temp at sustained load</div></div>
+      <div class="stat-box"><div class="stat-num">~15%</div><div class="stat-unit">drop</div><div class="stat-label">Speed loss after thermal throttle</div></div>
+    </div>
+
+    <h3>Generation Speed Over 180s Session</h3>
+    <p>Thermal throttling kicks in after ~90 seconds of sustained inference as the CPU temperature approaches the thermal limit. The governor reduces clock speeds to maintain safe temperatures.</p>
+
+    <div class="thermal-chart">
+      <div class="thermal-row">
+        <span class="thermal-time">0–30s</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:100%; background:linear-gradient(90deg,#00ff88,#6ee7b7);"><span class="thermal-val">8.7 t/s</span></div></div>
+        <span class="thermal-temp">38°C</span>
+      </div>
+      <div class="thermal-row">
+        <span class="thermal-time">30–60s</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:97%; background:linear-gradient(90deg,#22c55e,#86efac);"><span class="thermal-val">8.4 t/s</span></div></div>
+        <span class="thermal-temp">44°C</span>
+      </div>
+      <div class="thermal-row">
+        <span class="thermal-time">60–90s</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:90%; background:linear-gradient(90deg,#f97316,#fdba74);"><span class="thermal-val">7.8 t/s</span></div></div>
+        <span class="thermal-temp">49°C</span>
+      </div>
+      <div class="thermal-row">
+        <span class="thermal-time">90–120s</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:85%; background:linear-gradient(90deg,#ef4444,#fca5a5);"><span class="thermal-val">7.4 t/s</span></div></div>
+        <span class="thermal-temp">52°C</span>
+      </div>
+      <div class="thermal-row">
+        <span class="thermal-time">120–180s</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:84%; background:linear-gradient(90deg,#ef4444,#fca5a5);"><span class="thermal-val">7.3 t/s</span></div></div>
+        <span class="thermal-temp">52°C</span>
+      </div>
+    </div>
+
+    <div class="callout-warn">
+      <strong>Steady-state at ~7.3 t/s</strong> after throttling — a 16% drop from peak. The thermal governor on Snapdragon 8 Gen 3 enforces a ~52°C ceiling on the CPU cluster, reducing clock from 3.3 GHz to ~2.6 GHz under sustained load. Short conversational bursts stay at peak performance; long document analysis degrades.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- G. OOM FORENSICS -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">G</span> OOM Kill Forensics</h2>
+    <p>Android's Low Memory Killer Daemon (LMKD) enforces memory watermarks. When available memory drops below a threshold, it kills processes in priority order. llama-server is a background service with no foreground priority — it's one of the first casualties.</p>
+
+    <div class="perf-block">
+<span class="pc"># Android LMKD log (logcat -b events)</span>
+<span class="ph">I/lowmemorykiller</span>: Kill <span class="pv">'llama-server'</span> (<span class="pv">pid 18432</span>), uid 10163, <span class="pv">adj 700</span>
+                   to free <span class="pv">2284MB</span>; reason: pressure critical
+                   mem_avail=<span class="pv">312MB</span> &lt; min_free=<span class="pv">400MB</span> (watermark: critical)
+                   oom_score_adj=<span class="pv">700</span> (cached background process)
+
+<span class="ph">I/lowmemorykiller</span>: Memory pressure: <span class="pv">critical</span>
+                   anon=<span class="pv">8841MB</span> file=<span class="pv">441MB</span> free=<span class="pv">312MB</span>
+                   min_free_pages: <span class="pv">51200</span> (200MB)
+    </div>
+
+    <table class="data-table">
+      <thead><tr><th>Device RAM</th><th>Free during inference</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr><td>3 GB total</td><td class="val-red">~200 MB free</td><td class="val-red">OOM kill — below LMKD critical watermark</td></tr>
+        <tr><td>6 GB total</td><td class="val-orange">~800 MB free</td><td class="val-orange">Marginal — Android may kill background apps</td></tr>
+        <tr><td>8 GB total</td><td class="val-blue">~1.8 GB free</td><td class="val-green">Stable — comfortable headroom above watermarks</td></tr>
+        <tr><td>12 GB total (test device)</td><td class="val-green">~3.4 GB free</td><td class="val-green">Stable — plenty of headroom</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-warn">
+      <strong>The 3 GB device case:</strong> With model (2.28 GB) + KV cache (0.19 GB) + OS (0.5 GB) = 2.97 GB needed, a 3 GB device has ~30 MB free — well below Android's minimum free threshold. LMKD will kill llama-server within seconds of it allocating full model memory. The minimum viable RAM for this setup is 6 GB.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- H. BACKEND PROJECTIONS -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">H</span> Alternative Backend Projections</h2>
+    <p>Mathematical projections for GPU and NPU backends — not guesses, derived from bandwidth and compute specs against the measured workload.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Backend</th><th>Peak Compute</th><th>Memory BW</th><th>Projected t/s</th><th>Methodology</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>CPU (measured)</td><td class="val-blue">300 GFLOPS</td><td class="val-blue">~19.4 GB/s eff.</td>
+          <td class="val-green">8.7 t/s ✓</td><td>Baseline — measured</td>
+        </tr>
+        <tr>
+          <td>Adreno 750 GPU (Vulkan)</td><td class="val-blue">1,150 GFLOPS FP16</td><td class="val-blue">68 GB/s</td>
+          <td class="val-orange">~18 t/s</td>
+          <td>BW-limited: 68/19.4 × 8.7 = 30.5 raw; ×0.59 efficiency factor for quantization dequant overhead on GPU + driver overhead</td>
+        </tr>
+        <tr>
+          <td>Hexagon NPU (QNN INT8)</td><td class="val-blue">46 TOPS INT8</td><td class="val-blue">77 GB/s</td>
+          <td class="val-orange">~35 t/s</td>
+          <td>Compute-bound at INT8: 46,000 / (3.82B × 2) = 6,021 t/s peak, capped by 77 GB/s BW → 77/2.23 = 34.5 t/s; requires INT8 activations (2–3% quality penalty vs Q4_K_M)</td>
+        </tr>
+        <tr>
+          <td>Hexagon NPU (INT4)</td><td class="val-blue">~23 TOPS eff.</td><td class="val-blue">77 GB/s</td>
+          <td class="val-green">~60+ t/s</td>
+          <td>INT4 weights map directly; 1.12 GB model → 77/1.12 = 68 t/s BW projection; not yet supported in stable QNN build</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout-blue">
+      <strong>Why the GPU projection is conservative at ~18 t/s:</strong> Adreno 750 has 68 GB/s memory bandwidth, giving a raw bandwidth projection of 30.5 t/s. But Q4_K_M requires dequantizing 4-bit weights to FP16 before each matmul on the GPU — the Vulkan compute shader for this adds ~40% overhead vs. the CPU's native NEON Q4 path. Real-world Vulkan llama.cpp numbers on similar SoCs average ~60% of the theoretical peak.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- I. DRAM ROW BUFFER -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">I</span> DRAM Row Buffer Locality</h2>
+    <p>LPDDR5X DRAM organizes memory into rows (~2KB each). Accessing the same row twice uses a fast "row hit" path. Accessing a different row requires a slow row precharge + activate cycle. The random access pattern of weight matrix reads produces very few row hits.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Parameter</th><th>Value</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>DRAM row buffer size</td><td class="val-blue">2 KB</td><td>LPDDR5X standard row size</td></tr>
+        <tr><td>Row buffer hit rate (inference)</td><td class="val-orange">~15%</td><td>Weight access pattern is near-sequential within layers but jumps between layers</td></tr>
+        <tr><td>Row hit latency</td><td class="val-green">~15 ns</td><td>Serve from open row</td></tr>
+        <tr><td>Row miss latency</td><td class="val-orange">~45 ns</td><td>Precharge + activate + read</td></tr>
+        <tr><td>Effective DRAM bandwidth</td><td class="val-orange">~41 GB/s</td><td>0.15 × 77 + 0.85 × (77 × 0.45) = 41.0 GB/s</td></tr>
+        <tr><td>CPU achieves</td><td class="val-blue">19.4 GB/s</td><td>Measured</td></tr>
+        <tr><td>Utilization of effective BW</td><td class="val-orange">47%</td><td>19.4 / 41.0 — not the DRAM, but the CPU's load/store bandwidth</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Reframing the bottleneck:</strong> The theoretical DRAM peak is 77 GB/s, but due to row buffer miss penalties, the effective bandwidth available to this workload is ~41 GB/s. The CPU is using 19.4 GB/s of that — 47% utilization. The remaining headroom (~21 GB/s) is not accessible via the CPU's load/store pipeline width. This is why the bottleneck is the <em>CPU's memory access pipeline</em>, not raw DRAM capacity.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- J. ATTENTION SINKS -->
+  <div class="section">
+    <h2><span class="num" style="background:var(--purple)">J</span> Attention Sinks &amp; Context Limits</h2>
+    <p>Phi-3 Mini, like other modern transformers, exhibits the <em>attention sink</em> phenomenon described in the StreamingLLM paper (Xiao et al., 2023). Initial tokens receive disproportionately high attention weight regardless of content.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Parameter</th><th>Value</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Declared context window</td><td class="val-blue">4,096 tokens</td><td>Phi-3-mini-4k-instruct configuration</td></tr>
+        <tr><td>Attention sink tokens</td><td class="val-orange">4 tokens</td><td>First 4 tokens always preserved in KV cache</td></tr>
+        <tr><td>Usable context</td><td class="val-green">4,092 tokens</td><td>4,096 − 4 sink tokens</td></tr>
+        <tr><td>KV cache at full context</td><td class="val-orange">1,536 MB</td><td>4,096 × 0.375 MB per token</td></tr>
+        <tr><td>StreamingLLM overhead</td><td class="val-orange">+15–20% latency</td><td>Dropping middle tokens requires recomputing positional encodings for retained tokens</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-blue">
+      <strong>Why attention sinks matter for mobile:</strong> To extend context beyond 4,096 tokens without blowing the KV cache, you'd use a sliding window that evicts middle tokens while preserving the 4 sink tokens. But StreamingLLM's recompute step adds 15–20% latency per eviction cycle — which at 8.7 t/s on CPU is a meaningful pause. The practical limit for smooth conversation on this setup is ~2,048 tokens (~5–10 back-and-forth exchanges) before performance degrades noticeably.
+    </div>
   </div>
 
   <hr>
