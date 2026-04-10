@@ -3,19 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LLM on Local Device | Satyam Sharma</title>
+<title>Building a Local LLM on My Phone | Satyam Sharma</title>
 <style>
   :root {
     --bg: #0a0a0f; --card: #111118; --border: #1e1e2e;
-    --accent: #4a9eff; --green: #00ff88; --text: #e0e0e0; --muted: #666;
+    --accent: #4a9eff; --green: #00ff88; --purple: #a855f7;
+    --orange: #f97316; --text: #e0e0e0; --muted: #666;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.7; padding-bottom: 80px; }
 
+  /* Hero */
   .hero {
     background: linear-gradient(135deg, #0a0a0f 0%, #0d1117 50%, #0a0f1a 100%);
     border-bottom: 1px solid var(--border);
-    padding: 70px 20px 60px; text-align: center; position: relative; overflow: hidden;
+    padding: 60px 20px 50px; text-align: center; position: relative; overflow: hidden;
   }
   .hero::before {
     content: ''; position: absolute; inset: 0;
@@ -27,88 +29,413 @@
     font-size: 0.78em; font-family: monospace; letter-spacing: 0.05em; margin-bottom: 20px;
   }
   .hero h1 {
-    font-size: clamp(2em, 6vw, 3.4em); font-weight: 800; line-height: 1.15;
+    font-size: clamp(1.8em, 5vw, 3em); font-weight: 800; line-height: 1.2;
     background: linear-gradient(135deg, #fff 30%, var(--accent));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     margin-bottom: 16px;
   }
-  .hero p { color: #888; font-size: 1em; max-width: 560px; margin: 0 auto 28px; }
-  .meta { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; font-size: 0.8em; color: var(--muted); font-family: monospace; }
+  .hero .sub { color: var(--muted); font-size: 1em; max-width: 520px; margin: 0 auto 24px; }
+  .meta { display: flex; justify-content: center; gap: 20px; font-size: 0.8em; color: var(--muted); flex-wrap: wrap; }
+  .meta span { display: flex; align-items: center; gap: 5px; }
 
-  .container { max-width: 800px; margin: 0 auto; padding: 0 20px; }
+  /* Layout */
+  .container { max-width: 720px; margin: 0 auto; padding: 0 20px; }
 
-  .section-title { font-size: 0.72em; font-family: monospace; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin: 50px 0 20px; }
+  /* Pills */
+  .stack { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+  .pill { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: 0.78em; font-family: monospace; color: var(--accent); }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
-  .card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-    padding: 22px; text-decoration: none; display: block; transition: border-color 0.2s, transform 0.2s;
+  /* Sections */
+  .section { margin: 48px 0; }
+  h2 { font-size: 1.4em; font-weight: 700; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  h2 .num { background: var(--accent); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75em; font-weight: 900; flex-shrink: 0; }
+  p { color: #bbb; margin-bottom: 14px; }
+
+  /* Code */
+  pre {
+    background: #0d1117; border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 16px; overflow-x: auto; font-family: monospace;
+    font-size: 0.82em; line-height: 1.6; margin: 16px 0; color: #c9d1d9;
   }
-  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .card-tag { font-size: 0.68em; font-family: monospace; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
-  .card h2 { font-size: 1.05em; font-weight: 700; color: #fff; margin-bottom: 8px; }
-  .card p { font-size: 0.85em; color: #888; line-height: 1.5; }
-  .card .card-footer { margin-top: 16px; font-size: 0.75em; color: var(--muted); font-family: monospace; display: flex; justify-content: space-between; }
-  .card .read-more { color: var(--accent); }
+  .cm { color: #6272a4; } .kw { color: #ff79c6; } .st { color: #f1fa8c; } .fn { color: #50fa7b; }
 
-  .stack { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
-  .pill {
-    background: #16161f; border: 1px solid var(--border); border-radius: 99px;
-    padding: 4px 12px; font-size: 0.75em; font-family: monospace; color: #aaa;
+  /* Pipeline */
+  .pipeline { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; margin: 24px 0; }
+  .pipe-step { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 0.8em; font-family: monospace; text-align: center; color: var(--accent); }
+  .pipe-arrow { color: var(--muted); font-size: 1.2em; padding: 0 6px; }
+
+  /* Screenshot placeholder */
+  .screenshot {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    margin: 20px 0; overflow: hidden;
   }
+  .screenshot .ss-label {
+    background: #16161f; border-bottom: 1px solid var(--border);
+    padding: 8px 14px; font-size: 0.72em; font-family: monospace; color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .screenshot .ss-label .dot-r { width:10px;height:10px;border-radius:50%;background:#ff5f57; }
+  .screenshot .ss-label .dot-y { width:10px;height:10px;border-radius:50%;background:#ffbd2e; }
+  .screenshot .ss-label .dot-g { width:10px;height:10px;border-radius:50%;background:#28ca41; }
+  .screenshot img { width: 100%; display: block; }
+  .screenshot .ss-placeholder {
+    padding: 48px 20px; text-align: center; color: var(--muted); font-family: monospace; font-size: 0.85em;
+  }
+  .screenshot .ss-placeholder .ss-icon { font-size: 2.5em; margin-bottom: 10px; display: block; }
 
-  footer { margin-top: 60px; padding-top: 28px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); font-size: 0.8em; font-family: monospace; }
+  /* Chat bubble mockup */
+  .chat-demo { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .bubble { max-width: 82%; padding: 10px 14px; border-radius: 14px; font-size: 0.85em; line-height: 1.5; }
+  .bubble.user { align-self: flex-end; background: #1a2a3a; border: 1px solid #1e3a5f; color: #cce4ff; border-bottom-right-radius: 4px; }
+  .bubble.ai { align-self: flex-start; background: var(--card); border: 1px solid var(--border); color: #ddd; border-bottom-left-radius: 4px; }
+  .bubble-label { font-size: 0.65em; color: var(--muted); margin-bottom: 4px; font-family: monospace; }
+  .typing { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+  .typing span { width: 6px; height: 6px; background: var(--muted); border-radius: 50%; animation: bounce 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+
+  /* Bench stats */
+  .stat-row { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; }
+  .stat-box { flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .stat-box .stat-num { font-size: 1.9em; font-weight: 800; color: var(--accent); font-family: monospace; line-height: 1; }
+  .stat-box .stat-unit { font-size: 0.72em; color: var(--muted); margin-top: 2px; }
+  .stat-box .stat-label { font-size: 0.72em; color: #888; margin-top: 6px; }
+
+  /* Bar chart */
+  .bar-chart { margin: 20px 0; display: flex; flex-direction: column; gap: 10px; }
+  .bar-row { display: flex; flex-direction: column; gap: 4px; }
+  .bar-label { font-size: 0.8em; color: #aaa; display: flex; justify-content: space-between; }
+  .bar-label .bar-num { color: var(--accent); font-family: monospace; font-weight: 600; }
+  .bar-track { height: 10px; background: #1a1a2a; border-radius: 99px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), #7bbfff); }
+
+  /* Bench table */
+  .bench-table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin: 20px 0; font-size: 0.88em; }
+  .bench-table th { background: #16161f; color: var(--muted); font-family: monospace; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  .bench-table td { padding: 10px 14px; border-bottom: 1px solid #16161f; color: #ccc; }
+  .bench-table tr:last-child td { border-bottom: none; }
+  .bench-table .val { color: var(--accent); font-family: monospace; font-weight: 600; }
+  .bench-table .best { color: var(--green); font-family: monospace; font-weight: 600; }
+
+  /* Callout */
+  .callout { background: rgba(0,255,136,0.06); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 0.9em; color: #aaa; }
+  .callout strong { color: var(--green); }
+  .callout-blue { background: rgba(74,158,255,0.07); border: 1px solid rgba(74,158,255,0.2); border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 0.9em; color: #aaa; }
+  .callout-blue strong { color: var(--accent); }
+
+  /* Command demo */
+  .cmd-demo { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 16px 0; }
+  .cmd-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid #16161f; }
+  .cmd-row:last-child { border-bottom: none; }
+  .cmd-name { color: var(--accent); font-family: monospace; font-size: 0.85em; font-weight: bold; white-space: nowrap; }
+  .cmd-desc { color: #888; font-size: 0.83em; }
+
+  /* Lessons */
+  .lesson { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--purple); border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 12px 0; font-size: 0.9em; }
+  .lesson strong { color: var(--purple); display: block; margin-bottom: 4px; }
+
+  /* Live badge */
+  .live-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: var(--green); padding: 6px 16px; border-radius: 99px; font-size: 0.82em; font-family: monospace; text-decoration: none; margin-top: 16px; transition: background 0.2s; }
+  .live-badge:hover { background: rgba(0,255,136,0.2); }
+  .dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  footer { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 0.82em; border-top: 1px solid var(--border); margin-top: 60px; }
+  footer a { color: var(--accent); text-decoration: none; }
 </style>
 </head>
 <body>
 
+<!-- HERO -->
 <div class="hero">
-  <div style="position:relative;z-index:1;">
-    <div class="tag">EDGE AI · ON-DEVICE LLM · ANDROID</div>
-    <h1>LLM on Local Device</h1>
-    <p>Running large language models fully on a phone — no cloud, no GPU, no internet. Real benchmarks, real builds.</p>
+  <div class="container">
+    <div class="tag">vibe coding · local llm · android · no cloud</div>
+    <h1>I Built a Full LLM Chat App on My Phone — No Cloud, No GPU</h1>
+    <p class="sub">Running Phi-3 Mini 3.8B fully on-device via llama.cpp on Android. Real benchmarks, OCR pipeline, slash commands — all in Termux.</p>
     <div class="meta">
-      <span>📱 Samsung Galaxy S24</span>
-      <span>⚙️ llama.cpp · Termux</span>
-      <span>🤖 Phi-3 Mini 3.8B</span>
-      <span>👤 Satyam Sharma</span>
+      <span>✍ Satyam Sharma</span>
+      <span>📅 April 2026</span>
+      <span>⏱ 8 min read</span>
     </div>
   </div>
 </div>
 
+<!-- CONTENT -->
 <div class="container">
 
-  <div class="section-title">Posts</div>
+  <!-- INTRO -->
+  <div class="section">
+    <p>After building a real-time vision AI system with MobileNetV2, I had a new question: <em>can I run an actual language model — something that can hold a conversation, summarize text, explain concepts — entirely on a phone with no internet?</em></p>
+    <p>The answer is yes. This is the story of how I went from zero to a fully working LLM chat app with streaming responses, OCR, slash commands, and real benchmark numbers — all running locally on a Samsung Galaxy S24 using Termux.</p>
 
-  <div class="cards">
-    <a class="card" href="benchmark.html">
-      <div class="card-tag">Benchmark · April 2026</div>
-      <h2>Benchmarking Phi-3 Mini on a Phone — With Numbers</h2>
-      <p>Real llama-bench results for Phi-3 Mini Q4 running CPU-only on Snapdragon 8 Gen 3. Prompt speed, generation speed, thread count analysis.</p>
-      <div class="card-footer">
-        <span>Phi-3 Mini · Q4_K_M · 2.23 GiB</span>
-        <span class="read-more">Read →</span>
-      </div>
-    </a>
+    <div class="stack">
+      <span class="pill">llama.cpp</span>
+      <span class="pill">Phi-3 Mini 3.8B</span>
+      <span class="pill">Q4_K_M quant</span>
+      <span class="pill">Flask</span>
+      <span class="pill">Tesseract OCR</span>
+      <span class="pill">Python</span>
+      <span class="pill">Termux · Android</span>
+      <span class="pill">No GPU</span>
+      <span class="pill">No Cloud</span>
+    </div>
   </div>
 
-  <div class="section-title">Stack</div>
-  <div class="stack">
-    <span class="pill">llama.cpp</span>
-    <span class="pill">Phi-3 Mini 3.8B</span>
-    <span class="pill">Q4_K_M quantization</span>
-    <span class="pill">Termux</span>
-    <span class="pill">Flask</span>
-    <span class="pill">Python</span>
-    <span class="pill">Tesseract OCR</span>
-    <span class="pill">Android aarch64</span>
-    <span class="pill">CPU-only inference</span>
-    <span class="pill">Server-Sent Events</span>
+  <hr>
+
+  <!-- STEP 1: BUILD LLAMA.CPP -->
+  <div class="section">
+    <h2><span class="num">1</span> Building llama.cpp on Android</h2>
+    <p>llama.cpp is a C++ inference engine that runs quantized LLMs on CPU. It compiles cleanly on Termux's aarch64 toolchain — no modifications needed.</p>
+    <pre><span class="cm"># Install build tools</span>
+pkg install -y cmake ninja clang git python
+
+<span class="cm"># Build llama.cpp</span>
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp
+cmake -B build
+cmake --build build -j4</pre>
+
+    <div class="callout">
+      <strong>Why llama.cpp?</strong> It runs on CPU-only with no external dependencies. The entire inference stack — tokenizer, attention, sampling — is self-contained. Perfect for Termux where you can't install CUDA or ROCm.
+    </div>
+  </div>
+
+  <!-- STEP 2: MODEL -->
+  <div class="section">
+    <h2><span class="num">2</span> Choosing the Right Model</h2>
+    <p>I started with TinyLlama 1.1B — fast, but gave random outputs for basic questions. Switched to <strong style="color:#fff">Phi-3 Mini 3.8B</strong> from Microsoft, quantized to Q4_K_M. Night and day difference in quality.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step">Phi-3 Mini<br><span style="color:#555;font-size:0.85em">7.6 GB fp16</span></div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">Q4_K_M quant<br><span style="color:#555;font-size:0.85em">70% smaller</span></div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">2.23 GiB<br><span style="color:#555;font-size:0.85em">fits in RAM</span></div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">8.7 t/s<br><span style="color:#555;font-size:0.85em">on Snapdragon</span></div>
+    </div>
+
+    <pre><span class="cm"># Download Phi-3 Mini Q4</span>
+curl -L -C - -o models/phi3-mini.gguf \
+  "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf"
+
+<span class="cm"># Start inference server</span>
+./build/bin/llama-server -m models/phi3-mini.gguf -c 4096 -t 4 --port 8080</pre>
+  </div>
+
+  <!-- STEP 3: CHAT UI -->
+  <div class="section">
+    <h2><span class="num">3</span> Building the Chat UI</h2>
+    <p>A Flask backend proxies requests to llama-server using the OpenAI-compatible API. The frontend streams tokens as they arrive via Server-Sent Events — so the response appears word by word, just like ChatGPT.</p>
+
+    <!-- Chat mockup -->
+    <div class="screenshot">
+      <div class="ss-label">
+        <span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span>
+        <span style="margin-left:6px;">LLM Chat — localhost:5001</span>
+      </div>
+      <div class="chat-demo">
+        <div>
+          <div class="bubble-label">You</div>
+          <div class="bubble user">What is quantization in machine learning?</div>
+        </div>
+        <div>
+          <div class="bubble-label">Phi-3 Mini</div>
+          <div class="bubble ai">Quantization reduces a model's numerical precision — for example from 32-bit floats to 4-bit integers. This shrinks the model size and speeds up inference, with minimal impact on output quality. It's what makes running a 3.8B parameter model on a phone practical.</div>
+        </div>
+        <div>
+          <div class="bubble-label">You</div>
+          <div class="bubble user">/summarize Quantization is a technique that maps high-precision values to lower-precision representations to reduce memory and compute requirements while preserving most of the original model accuracy.</div>
+        </div>
+        <div>
+          <div class="bubble-label">Phi-3 Mini</div>
+          <div class="bubble ai">Quantization converts high-precision model values to lower-precision ones, cutting memory and compute needs while keeping accuracy mostly intact.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout-blue">
+      <strong>Streaming via SSE:</strong> The Flask backend streams each token as it's generated using <code style="background:#1a1a2a;padding:1px 5px;border-radius:3px">text/event-stream</code>. The frontend reads the stream with a <code style="background:#1a1a2a;padding:1px 5px;border-radius:3px">ReadableStream</code> and appends tokens to the message in real time.
+    </div>
+  </div>
+
+  <!-- STEP 4: SLASH COMMANDS -->
+  <div class="section">
+    <h2><span class="num">4</span> Slash Command System</h2>
+    <p>I built a plugin-style slash command system. Type <code style="background:#1a1a2a;padding:1px 5px;border-radius:3px">/</code> and an autocomplete menu appears. Each command runs a specific pipeline — some hit the LLM, some run local tools.</p>
+
+    <div class="cmd-demo">
+      <div class="cmd-row"><span class="cmd-name">/extract</span><span class="cmd-desc">Take a photo or upload an image → extract text via Tesseract OCR</span></div>
+      <div class="cmd-row"><span class="cmd-name">/deepsearch</span><span class="cmd-desc">OCR the image, then feed extracted text to the LLM for deep analysis</span></div>
+      <div class="cmd-row"><span class="cmd-name">/summarize</span><span class="cmd-desc">Summarize any text you paste after the command</span></div>
+      <div class="cmd-row"><span class="cmd-name">/explain</span><span class="cmd-desc">Explain something in simple terms</span></div>
+      <div class="cmd-row"><span class="cmd-name">/bullets</span><span class="cmd-desc">Convert text into bullet points</span></div>
+      <div class="cmd-row"><span class="cmd-name">/calc</span><span class="cmd-desc">Evaluate math expressions — e.g. /calc sqrt(144)</span></div>
+      <div class="cmd-row"><span class="cmd-name">/time</span><span class="cmd-desc">Show current date and time</span></div>
+      <div class="cmd-row"><span class="cmd-name">/clear</span><span class="cmd-desc">Clear the chat history</span></div>
+    </div>
+  </div>
+
+  <!-- STEP 5: OCR PIPELINE -->
+  <div class="section">
+    <h2><span class="num">5</span> OCR Pipeline with Tesseract</h2>
+    <p>The <code style="background:#1a1a2a;padding:1px 5px;border-radius:3px">/extract</code> and <code style="background:#1a1a2a;padding:1px 5px;border-radius:3px">/deepsearch</code> commands use Tesseract OCR — running fully on-device. Snap a photo of a document, receipt, book page, or sign — the text is extracted and optionally analyzed by the LLM.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step">Camera / Image</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">Base64 encode</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">Tesseract OCR</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">Extracted Text</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">LLM Analysis</div>
+    </div>
+
+    <pre><span class="cm"># Install Tesseract in Termux</span>
+pkg install -y tesseract
+pip install pytesseract pillow
+
+<span class="cm"># Flask OCR endpoint</span>
+<span class="kw">@app</span>.route(<span class="st">"/ocr"</span>, methods=[<span class="st">"POST"</span>])
+<span class="kw">def</span> <span class="fn">ocr</span>():
+    img = Image.open(io.BytesIO(base64.b64decode(data)))
+    text = pytesseract.image_to_string(img).strip()
+    <span class="kw">return</span> jsonify({<span class="st">"text"</span>: text})</pre>
+  </div>
+
+  <hr>
+
+  <!-- BENCHMARKS -->
+  <div class="section">
+    <h2><span class="num">6</span> Performance &amp; Benchmarks</h2>
+    <p>All numbers measured with <code style="background:#1a1a2a;padding:1px 5px;border-radius:3px">llama-bench</code> — 3 repetitions, averaged. Device: Samsung Galaxy S24, Snapdragon 8 Gen 3, 12GB RAM, CPU-only.</p>
+
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-num">32.9</div>
+        <div class="stat-unit">t/s</div>
+        <div class="stat-label">Prompt Processing</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">8.7</div>
+        <div class="stat-unit">t/s</div>
+        <div class="stat-label">Text Generation</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">2.23</div>
+        <div class="stat-unit">GiB</div>
+        <div class="stat-label">Model RAM usage</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">4</div>
+        <div class="stat-unit">threads</div>
+        <div class="stat-label">Optimal config</div>
+      </div>
+    </div>
+
+    <h2 style="font-size:1.1em; margin-top:28px; margin-bottom:12px; display:block;">Thread Count vs Generation Speed</h2>
+    <div class="bar-chart">
+      <div class="bar-row">
+        <div class="bar-label"><span>4 threads — optimal</span><span class="bar-num">8.70 t/s ✓</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>8 threads — thermal throttle</span><span class="bar-num">6.81 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:78%"></div></div>
+      </div>
+    </div>
+
+    <h2 style="font-size:1.1em; margin-top:28px; margin-bottom:12px; display:block;">Prompt Length vs Processing Speed</h2>
+    <div class="bar-chart">
+      <div class="bar-row">
+        <div class="bar-label"><span>128 tokens (short)</span><span class="bar-num">28.54 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>512 tokens (medium)</span><span class="bar-num">22.65 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:79%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>1024 tokens (long)</span><span class="bar-num">21.59 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:75%"></div></div>
+      </div>
+    </div>
+
+    <table class="bench-table">
+      <thead>
+        <tr><th>Test</th><th>Threads</th><th>Speed (t/s)</th><th>Std Dev</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Prompt pp512</td><td>8</td><td class="val">32.95</td><td>±4.44</td></tr>
+        <tr><td>Generate tg128</td><td>8</td><td class="val">6.81</td><td>±1.25</td></tr>
+        <tr><td>Generate tg128</td><td>4</td><td class="best">8.70 ✓ best</td><td>±0.68</td></tr>
+        <tr><td>Prompt pp128</td><td>8</td><td class="val">28.54</td><td>±2.80</td></tr>
+        <tr><td>Prompt pp1024</td><td>8</td><td class="val">21.59</td><td>±0.54</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Key insight:</strong> More threads ≠ faster. The Snapdragon 8 Gen 3 has 4 performance cores and 4 efficiency cores. Using all 8 pulls in the slow efficiency cores and causes thermal throttling. 4 threads on perf-cores only wins every time.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- LESSONS -->
+  <div class="section">
+    <h2><span class="num">7</span> What I Learned</h2>
+
+    <div class="lesson">
+      <strong>Model size isn't everything</strong>
+      TinyLlama (1.1B) was nearly twice as fast but gave random, unusable outputs. Phi-3 Mini (3.8B) is slower but actually answers questions correctly. Quality matters more than speed for a real assistant.
+    </div>
+    <div class="lesson">
+      <strong>Quantization is a superpower</strong>
+      Q4_K_M brings a 7.6 GB model down to 2.23 GB — a 70% reduction — with barely noticeable quality loss. Without quantization, Phi-3 Mini simply wouldn't fit in phone RAM.
+    </div>
+    <div class="lesson">
+      <strong>Thread tuning matters on mobile</strong>
+      Blindly throwing all 8 cores at the problem gave worse performance than targeted 4-core inference due to thermal throttling and the efficiency/performance core split in Snapdragon.
+    </div>
+    <div class="lesson">
+      <strong>The phone is more capable than you think</strong>
+      8.7 tokens/second means a 100-word reply in ~12 seconds. That's fast enough to be genuinely useful for summarization, explanation, and Q&amp;A — entirely offline.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- TRY IT -->
+  <div class="section" style="text-align:center;">
+    <h2 style="justify-content:center;"><span class="num">8</span> Try It Yourself</h2>
+    <p>The full stack runs on any Android phone with Termux. No special hardware required.</p>
+    <pre style="text-align:left;max-width:480px;margin:20px auto;">
+<span class="cm"># 1. Install Termux from F-Droid</span>
+<span class="cm"># 2. Build llama.cpp (see Step 1)</span>
+<span class="cm"># 3. Download Phi-3 Mini (2.3 GB)</span>
+<span class="cm"># 4. Start server</span>
+./build/bin/llama-server \
+  -m models/phi3-mini.gguf \
+  -c 4096 -t 4 --port 8080
+
+<span class="cm"># 5. Start chat UI (Flask)</span>
+cd llm-chat && python app.py
+<span class="cm"># Open http://localhost:5001</span></pre>
+    <a class="live-badge" href="https://github.com/destortion/llm-on-local-device">
+      <span class="dot"></span> View on GitHub
+    </a>
   </div>
 
 </div>
 
-<footer>Satyam Sharma · destortion.github.io · 2026</footer>
+<footer>
+  <p>Satyam Sharma · <a href="https://destortion.github.io/Edge-ai-computing">Edge AI Blog</a> · 2026</p>
+</footer>
 
 </body>
 </html>
