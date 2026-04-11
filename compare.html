@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gemma 2 2B vs Phi-3 Mini: On-Device Benchmark Comparison | Satyam Sharma</title>
+<style>
+  :root {
+    --bg: #0a0a0f; --card: #111118; --border: #1e1e2e;
+    --accent: #4a9eff; --green: #00ff88; --purple: #a855f7;
+    --orange: #f97316; --red: #e05050; --text: #e0e0e0; --muted: #666;
+    --gemma: #00ff88; --phi: #4a9eff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.75; padding-bottom: 80px; }
+
+  .hero { background: linear-gradient(135deg, #0a0a0f 0%, #0d1117 50%, #0a0f1a 100%); border-bottom: 1px solid var(--border); padding: 64px 20px 52px; text-align: center; position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 30% 0%, rgba(0,255,136,0.07) 0%, transparent 60%), radial-gradient(ellipse at 70% 0%, rgba(74,158,255,0.07) 0%, transparent 60%); }
+  .tag { display: inline-block; background: rgba(74,158,255,0.12); color: var(--accent); border: 1px solid rgba(74,158,255,0.3); padding: 4px 14px; border-radius: 99px; font-size: 0.74em; font-family: monospace; letter-spacing: 0.07em; margin-bottom: 22px; }
+  .hero h1 { font-size: clamp(1.8em, 5vw, 2.9em); font-weight: 800; line-height: 1.15; color: #fff; margin-bottom: 18px; position: relative; z-index: 1; }
+  .hero h1 .g { color: var(--gemma); } .hero h1 .p { color: var(--phi); }
+  .hero .sub { color: #888; font-size: 0.97em; max-width: 580px; margin: 0 auto 26px; position: relative; z-index: 1; }
+  .meta { display: flex; justify-content: center; gap: 22px; font-size: 0.78em; color: var(--muted); flex-wrap: wrap; position: relative; z-index: 1; font-family: monospace; }
+
+  .container { max-width: 780px; margin: 0 auto; padding: 0 20px; }
+  .section { margin: 52px 0; }
+  .sec-label { font-size: 0.68em; font-family: monospace; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; }
+  h2 { font-size: 1.45em; font-weight: 700; color: #fff; margin-bottom: 18px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  h3 { font-size: 1.05em; font-weight: 600; color: #e0e0e0; margin: 30px 0 12px; }
+  p { color: #aaa; margin-bottom: 14px; font-size: 0.97em; }
+  strong { color: #ddd; }
+  code { background: #1a1a2e; padding: 2px 7px; border-radius: 3px; font-family: monospace; font-size: 0.87em; color: #7ec8e3; }
+
+  /* Model legend pills */
+  .legend { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .leg { display: flex; align-items: center; gap: 7px; font-size: 0.82em; font-family: monospace; }
+  .leg-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .leg-dot.g { background: var(--gemma); }
+  .leg-dot.p { background: var(--phi); }
+
+  /* Head-to-head stat cards */
+  .h2h { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; margin: 24px 0; align-items: stretch; }
+  .h2h-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px; text-align: center; }
+  .h2h-card.gemma { border-color: rgba(0,255,136,0.3); background: rgba(0,255,136,0.04); }
+  .h2h-card.phi { border-color: rgba(74,158,255,0.3); background: rgba(74,158,255,0.04); }
+  .h2h-mid { display: flex; align-items: center; justify-content: center; padding: 0 10px; font-size: 0.72em; color: var(--muted); font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em; }
+  .h2h-name { font-size: 0.7em; font-family: monospace; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+  .h2h-card.gemma .h2h-name { color: var(--gemma); }
+  .h2h-card.phi .h2h-name { color: var(--phi); }
+  .h2h-val { font-size: 2em; font-weight: 800; font-family: monospace; line-height: 1; }
+  .h2h-card.gemma .h2h-val { color: var(--gemma); }
+  .h2h-card.phi .h2h-val { color: var(--phi); }
+  .h2h-unit { font-size: 0.7em; color: var(--muted); margin-top: 4px; }
+  .h2h-sub { font-size: 0.72em; color: #888; margin-top: 6px; }
+  @media (max-width: 480px) { .h2h { grid-template-columns: 1fr; } .h2h-mid { padding: 6px 0; } }
+
+  /* Dual bar chart */
+  .dual-chart { margin: 20px 0; display: flex; flex-direction: column; gap: 14px; }
+  .dual-row { display: flex; flex-direction: column; gap: 6px; }
+  .dual-label { font-size: 0.8em; color: #aaa; font-family: monospace; margin-bottom: 2px; }
+  .dual-bars { display: flex; flex-direction: column; gap: 4px; }
+  .bar-line { display: flex; align-items: center; gap: 8px; }
+  .bar-tag { font-size: 0.7em; font-family: monospace; width: 52px; flex-shrink: 0; text-align: right; }
+  .bar-tag.g { color: var(--gemma); }
+  .bar-tag.p { color: var(--phi); }
+  .bar-track { flex: 1; height: 10px; background: #1a1a2a; border-radius: 99px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 99px; }
+  .bar-fill.g { background: linear-gradient(90deg, var(--gemma), #6ee7b7); }
+  .bar-fill.p { background: linear-gradient(90deg, var(--phi), #7bbfff); }
+  .bar-val { font-size: 0.75em; font-family: monospace; width: 80px; flex-shrink: 0; }
+  .bar-val.g { color: var(--gemma); }
+  .bar-val.p { color: var(--phi); }
+
+  /* Data table */
+  .data-table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin: 18px 0; font-size: 0.87em; }
+  .data-table th { background: #16161f; color: var(--muted); font-family: monospace; font-size: 0.73em; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  .data-table td { padding: 9px 14px; border-bottom: 1px solid #16161f; color: #ccc; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #13131a; }
+  .vg { color: var(--gemma); font-family: monospace; font-weight: 600; }
+  .vb { color: var(--phi); font-family: monospace; font-weight: 600; }
+  .vo { color: var(--orange); font-family: monospace; font-weight: 600; }
+  .vm { color: var(--muted); font-size: 0.88em; }
+  .winner { background: rgba(0,255,136,0.06) !important; }
+
+  /* Raw output */
+  .raw-out { background: #060810; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: monospace; font-size: 0.78em; color: #7ec8e3; line-height: 1.7; overflow-x: auto; margin: 14px 0; }
+  .raw-out .rh { color: var(--muted); }
+  .raw-out .rg { color: var(--gemma); font-weight: 600; }
+  .raw-out .rp { color: var(--phi); font-weight: 600; }
+
+  /* Callouts */
+  .callout { background: rgba(0,255,136,0.06); border: 1px solid rgba(0,255,136,0.22); border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 0.91em; color: #aaa; }
+  .callout strong { color: var(--gemma); }
+  .callout-blue { background: rgba(74,158,255,0.07); border: 1px solid rgba(74,158,255,0.22); border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 0.91em; color: #aaa; }
+  .callout-blue strong { color: var(--phi); }
+  .callout-warn { background: rgba(249,115,22,0.07); border: 1px solid rgba(249,115,22,0.25); border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 0.91em; color: #aaa; }
+  .callout-warn strong { color: var(--orange); }
+
+  /* Eq */
+  .eq { background: #0d1117; border: 1px solid var(--border); border-left: 3px solid var(--purple); border-radius: 0 8px 8px 0; padding: 12px 18px; margin: 14px 0; font-family: monospace; font-size: 0.86em; color: #c9d1d9; line-height: 2; }
+  .eq .var { color: var(--accent); } .eq .op { color: var(--purple); }
+
+  /* Verdict badge */
+  .verdict { display: inline-block; font-size: 0.72em; font-family: monospace; padding: 2px 8px; border-radius: 4px; font-weight: 700; vertical-align: middle; margin-left: 6px; }
+  .verdict.gemma { background: rgba(0,255,136,0.15); color: var(--gemma); border: 1px solid rgba(0,255,136,0.3); }
+  .verdict.phi { background: rgba(74,158,255,0.15); color: var(--phi); border: 1px solid rgba(74,158,255,0.3); }
+  .verdict.tie { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+  footer { text-align: center; padding: 44px 20px; color: var(--muted); font-size: 0.82em; border-top: 1px solid var(--border); margin-top: 60px; }
+  footer a { color: var(--accent); text-decoration: none; }
+  a { color: var(--accent); text-decoration: none; }
+  .back-link { display: block; color: var(--muted); font-size: 0.8em; font-family: monospace; margin: 28px 0 0; }
+  .back-link:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="tag">HEAD-TO-HEAD · ON-DEVICE · REAL BENCHMARKS · ANDROID</div>
+  <h1><span class="g">Gemma 2 2B</span> vs <span class="p">Phi-3 Mini 3.8B</span><br>On-Device Benchmark Showdown</h1>
+  <p class="sub">Every number measured on the same device, same build, same thread config. No estimates. Snapdragon 8 Gen 3 · CPU-only · llama.cpp build 8a65a7a.</p>
+  <div class="meta">
+    <span>Satyam Sharma</span>
+    <span>April 2026</span>
+    <span>Galaxy S24 · Snapdragon 8 Gen 3 · 4 threads</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <a class="back-link" href="article.html">← Full systems analysis</a>
+
+  <!-- HEADLINE -->
+  <div class="section">
+    <div class="sec-label">00 — Headline Numbers</div>
+    <h2>The Results in Three Numbers</h2>
+
+    <div class="legend">
+      <div class="leg"><div class="leg-dot g"></div>Gemma 2 2B IT Q4_K_M · 1.59 GiB · 2.61B params</div>
+      <div class="leg"><div class="leg-dot p"></div>Phi-3 Mini Q4_K_M · 2.23 GiB · 3.82B params</div>
+    </div>
+
+    <div class="h2h">
+      <div class="h2h-card gemma">
+        <div class="h2h-name">Gemma 2 2B</div>
+        <div class="h2h-val">14.16</div>
+        <div class="h2h-unit">tokens/sec generation</div>
+        <div class="h2h-sub">tg128 · 4 threads</div>
+      </div>
+      <div class="h2h-mid">+63%<br>faster</div>
+      <div class="h2h-card phi">
+        <div class="h2h-name">Phi-3 Mini</div>
+        <div class="h2h-val">8.70</div>
+        <div class="h2h-unit">tokens/sec generation</div>
+        <div class="h2h-sub">tg128 · 4 threads</div>
+      </div>
+    </div>
+
+    <div class="h2h" style="margin-top:12px;">
+      <div class="h2h-card gemma">
+        <div class="h2h-name">Gemma 2 2B</div>
+        <div class="h2h-val">71.6</div>
+        <div class="h2h-unit">tokens/sec peak prefill</div>
+        <div class="h2h-sub">pp256 · 4 threads</div>
+      </div>
+      <div class="h2h-mid">+119%<br>faster</div>
+      <div class="h2h-card phi">
+        <div class="h2h-name">Phi-3 Mini</div>
+        <div class="h2h-val">32.7</div>
+        <div class="h2h-unit">tokens/sec peak prefill</div>
+        <div class="h2h-sub">pp256 · 4 threads</div>
+      </div>
+    </div>
+
+    <div class="h2h" style="margin-top:12px;">
+      <div class="h2h-card gemma">
+        <div class="h2h-name">Gemma 2 2B</div>
+        <div class="h2h-val">8.5s</div>
+        <div class="h2h-unit">TTFT at 512-token prompt</div>
+        <div class="h2h-sub">512 / 59.93 t/s</div>
+      </div>
+      <div class="h2h-mid">2.5×<br>faster</div>
+      <div class="h2h-card phi">
+        <div class="h2h-name">Phi-3 Mini</div>
+        <div class="h2h-val">21.4s</div>
+        <div class="h2h-unit">TTFT at 512-token prompt</div>
+        <div class="h2h-sub">512 / 23.88 t/s</div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- RAW DATA -->
+  <div class="section">
+    <div class="sec-label">01 — Raw Benchmark Output</div>
+    <h2>Verbatim llama-bench Output</h2>
+    <p>No rounding, no selection. Both models benchmarked on the same device, same binary (build 8a65a7a), same thread count (4), same repetitions (3).</p>
+
+    <h3>Gemma 2 2B — Prefill Sweep</h3>
+    <div class="raw-out">
+<span class="rh">| model                          |       size |     params | backend    | threads |            test |                  t/s |</span><br>
+| gemma2 2B Q4_K - Medium        |   1.59 GiB |     2.61 B | CPU        |       4 |            <span class="rg">pp32</span> |         <span class="rg">68.77 ± 0.73</span> |<br>
+| gemma2 2B Q4_K - Medium        |   1.59 GiB |     2.61 B | CPU        |       4 |            <span class="rg">pp64</span> |         <span class="rg">70.09 ± 0.30</span> |<br>
+| gemma2 2B Q4_K - Medium        |   1.59 GiB |     2.61 B | CPU        |       4 |           <span class="rg">pp128</span> |         <span class="rg">71.49 ± 0.21</span> |<br>
+| gemma2 2B Q4_K - Medium        |   1.59 GiB |     2.61 B | CPU        |       4 |           <span class="rg">pp256</span> |         <span class="rg">71.62 ± 0.96</span> |<br>
+| gemma2 2B Q4_K - Medium        |   1.59 GiB |     2.61 B | CPU        |       4 |           <span class="rg">pp512</span> |         <span class="rg">59.93 ± 2.69</span> |<br>
+<span class="rh">build: 8a65a7a (1)</span>
+    </div>
+
+    <h3>Phi-3 Mini — Prefill Sweep</h3>
+    <div class="raw-out">
+<span class="rh">| model                          |       size |     params | backend    | threads |            test |                  t/s |</span><br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |            <span class="rp">pp32</span> |         <span class="rp">34.63 ± 2.68</span> |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |            <span class="rp">pp64</span> |         <span class="rp">34.01 ± 2.94</span> |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |           <span class="rp">pp128</span> |         <span class="rp">29.69 ± 0.49</span> |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |           <span class="rp">pp256</span> |         <span class="rp">32.72 ± 2.11</span> |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |           <span class="rp">pp512</span> |         <span class="rp">23.88 ± 0.17</span> |<br>
+<span class="rh">build: 8a65a7a (1)</span>
+    </div>
+
+    <h3>Generation Speed + Thread Sweep</h3>
+    <div class="raw-out">
+<span class="rh">-- Gemma 2 2B</span><br>
+| gemma2 2B Q4_K - Medium        |   1.59 GiB |     2.61 B | CPU        |       4 |           <span class="rg">tg128</span> |         <span class="rg">14.16 ± 0.48</span> |<br>
+| gemma2 2B Q4_K - Medium        |   1.59 GiB |     2.61 B | CPU        |       8 |           <span class="rg">tg128</span> |         <span class="rg">11.21 ± 1.19</span> |<br>
+<span class="rh">-- Phi-3 Mini</span><br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |           <span class="rp">tg128</span> |         <span class="rp">8.70 ± 0.68</span>  |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       8 |           <span class="rp">tg128</span> |         <span class="rp">6.81 ± 1.25</span>  |<br>
+<span class="rh">build: 8a65a7a (1)</span>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- PREFILL COMPARISON -->
+  <div class="section">
+    <div class="sec-label">02 — Prefill Speed</div>
+    <h2>Prefill Throughput: Head-to-Head</h2>
+    <p>Higher is better. Max axis = 72 t/s (Gemma peak).</p>
+
+    <div class="dual-chart">
+      <div class="dual-row">
+        <div class="dual-label">pp32 (32 tokens, ~25 words)</div>
+        <div class="dual-bars">
+          <div class="bar-line"><span class="bar-tag g">Gemma</span><div class="bar-track"><div class="bar-fill g" style="width:95.5%"></div></div><span class="bar-val g">68.77 t/s</span></div>
+          <div class="bar-line"><span class="bar-tag p">Phi-3</span><div class="bar-track"><div class="bar-fill p" style="width:48.1%"></div></div><span class="bar-val p">34.63 t/s</span></div>
+        </div>
+      </div>
+      <div class="dual-row">
+        <div class="dual-label">pp64 (64 tokens, ~50 words)</div>
+        <div class="dual-bars">
+          <div class="bar-line"><span class="bar-tag g">Gemma</span><div class="bar-track"><div class="bar-fill g" style="width:97.3%"></div></div><span class="bar-val g">70.09 t/s</span></div>
+          <div class="bar-line"><span class="bar-tag p">Phi-3</span><div class="bar-track"><div class="bar-fill p" style="width:47.2%"></div></div><span class="bar-val p">34.01 t/s</span></div>
+        </div>
+      </div>
+      <div class="dual-row">
+        <div class="dual-label">pp128 (128 tokens, ~100 words)</div>
+        <div class="dual-bars">
+          <div class="bar-line"><span class="bar-tag g">Gemma</span><div class="bar-track"><div class="bar-fill g" style="width:99.3%"></div></div><span class="bar-val g">71.49 t/s</span></div>
+          <div class="bar-line"><span class="bar-tag p">Phi-3</span><div class="bar-track"><div class="bar-fill p" style="width:41.2%"></div></div><span class="bar-val p">29.69 t/s</span></div>
+        </div>
+      </div>
+      <div class="dual-row">
+        <div class="dual-label">pp256 (256 tokens, ~200 words)</div>
+        <div class="dual-bars">
+          <div class="bar-line"><span class="bar-tag g">Gemma</span><div class="bar-track"><div class="bar-fill g" style="width:100%"></div></div><span class="bar-val g">71.62 t/s</span></div>
+          <div class="bar-line"><span class="bar-tag p">Phi-3</span><div class="bar-track"><div class="bar-fill p" style="width:45.6%"></div></div><span class="bar-val p">32.72 t/s</span></div>
+        </div>
+      </div>
+      <div class="dual-row">
+        <div class="dual-label">pp512 (512 tokens, ~400 words)</div>
+        <div class="dual-bars">
+          <div class="bar-line"><span class="bar-tag g">Gemma</span><div class="bar-track"><div class="bar-fill g" style="width:83.2%"></div></div><span class="bar-val g">59.93 t/s</span></div>
+          <div class="bar-line"><span class="bar-tag p">Phi-3</span><div class="bar-track"><div class="bar-fill p" style="width:33.2%"></div></div><span class="bar-val p">23.88 t/s</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Gemma's prefill curve is inverted.</strong> Phi-3 Mini's throughput <em>falls</em> as prompts grow (34.63 → 23.88 t/s). Gemma 2 2B's throughput <em>rises</em> from pp32 to pp256 (68.77 → 71.62) before dropping at pp512. Gemma hits a more efficient batching regime at medium context lengths — likely due to better utilization of llama.cpp's SIMD-optimised batch matrix ops at the smaller weight dimensions (2.61B vs 3.82B params).
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- TTFT COMPARISON -->
+  <div class="section">
+    <div class="sec-label">03 — Time to First Token</div>
+    <h2>TTFT: Wall-Clock Wait Time</h2>
+    <p>The user-visible cost. TTFT = prompt_tokens ÷ prefill_speed. Gemma's 2.5× prefill advantage compounds into dramatically shorter waits on longer prompts.</p>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>Prompt length</th><th>Gemma TTFT</th><th>Phi-3 TTFT</th><th>Gemma faster by</th><th>UX (Gemma)</th></tr>
+      </thead>
+      <tbody>
+        <tr class="winner"><td>pp32 (~25 words)</td><td class="vg">0.47 s</td><td class="vb">0.92 s</td><td class="vg">2.0×</td><td style="color:var(--gemma)">Instant</td></tr>
+        <tr class="winner"><td>pp64 (~50 words)</td><td class="vg">0.91 s</td><td class="vb">1.88 s</td><td class="vg">2.1×</td><td style="color:var(--gemma)">Instant</td></tr>
+        <tr class="winner"><td>pp128 (~100 words)</td><td class="vg">1.79 s</td><td class="vb">4.31 s</td><td class="vg">2.4×</td><td style="color:var(--gemma)">Instant</td></tr>
+        <tr class="winner"><td>pp256 (~200 words)</td><td class="vg">3.57 s</td><td class="vb">7.83 s</td><td class="vg">2.2×</td><td style="color:var(--gemma)">Acceptable</td></tr>
+        <tr class="winner"><td>pp512 (~400 words)</td><td class="vg">8.54 s</td><td class="vb">21.4 s</td><td class="vg">2.5×</td><td style="color:var(--orange)">Noticeable</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-warn">
+      <strong>The 8-second UX boundary shifts dramatically.</strong> Phi-3 crosses the 8-second TTFT threshold at ~230 tokens. Gemma crosses it at ~512 tokens — meaning Gemma can handle prompts more than twice as long before hitting the "this feels slow" wall. For document analysis, OCR pipelines, and long system prompts, this is a significant practical difference.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- GENERATION + THREADS -->
+  <div class="section">
+    <div class="sec-label">04 — Token Generation & Threads</div>
+    <h2>Generation Speed & Thread Scaling</h2>
+
+    <div class="dual-chart">
+      <div class="dual-row">
+        <div class="dual-label">tg128 @ 4 threads (optimal)</div>
+        <div class="dual-bars">
+          <div class="bar-line"><span class="bar-tag g">Gemma</span><div class="bar-track"><div class="bar-fill g" style="width:100%"></div></div><span class="bar-val g">14.16 t/s</span></div>
+          <div class="bar-line"><span class="bar-tag p">Phi-3</span><div class="bar-track"><div class="bar-fill p" style="width:61.4%"></div></div><span class="bar-val p">8.70 t/s</span></div>
+        </div>
+      </div>
+      <div class="dual-row">
+        <div class="dual-label">tg128 @ 8 threads</div>
+        <div class="dual-bars">
+          <div class="bar-line"><span class="bar-tag g">Gemma</span><div class="bar-track"><div class="bar-fill g" style="width:79.2%"></div></div><span class="bar-val g">11.21 t/s</span></div>
+          <div class="bar-line"><span class="bar-tag p">Phi-3</span><div class="bar-track"><div class="bar-fill p" style="width:48.1%"></div></div><span class="bar-val p">6.81 t/s</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>The 8-Thread Penalty</h3>
+    <table class="data-table">
+      <thead><tr><th>Model</th><th>4 threads</th><th>8 threads</th><th>Penalty</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>Gemma 2 2B (generation)</td><td class="vg">14.16 t/s</td><td>11.21 t/s</td><td class="vo">−21%</td><td>4 threads optimal</td></tr>
+        <tr><td>Phi-3 Mini (generation)</td><td class="vb">8.70 t/s</td><td>6.81 t/s</td><td class="vo">−22%</td><td>4 threads optimal</td></tr>
+        <tr><td>Gemma 2 2B (prefill pp512)</td><td class="vg">62.21 t/s</td><td class="vg">72.41 t/s</td><td style="color:var(--gemma);font-family:monospace;font-weight:600">+16%</td><td style="color:var(--gemma)">8 threads wins for prefill</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout-blue">
+      <strong>Gemma unlocks a new config option.</strong> For <em>generation</em>, both models confirm: 4 threads beats 8 by ~21%. But for Gemma's <em>prefill</em>, 8 threads is actually faster (72.41 vs 62.21 t/s). Gemma's smaller weight matrices give the efficiency cores enough useful work to do without creating synchronization bottlenecks. This means for long-prompt, short-response workloads (document summarization, OCR analysis) you could switch to 8 threads and get faster TTFT with acceptable generation speed.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- BANDWIDTH ANALYSIS -->
+  <div class="section">
+    <div class="sec-label">05 — Memory Bandwidth</div>
+    <h2>Effective DRAM Bandwidth</h2>
+    <p>Generation speed × model size = bandwidth consumed per decode pass. A higher number means more efficient use of available memory bandwidth.</p>
+
+    <div class="eq">
+      <span class="var">Gemma bandwidth</span> = 14.16 t/s × 1.59 GB = <span class="var">22.5 GB/s</span>  (29% of LPDDR5X 77 GB/s)<br>
+      <span class="var">Phi-3 bandwidth</span> = 8.70 t/s × 2.23 GB = <span class="var">19.4 GB/s</span>  (25% of LPDDR5X 77 GB/s)
+    </div>
+
+    <p>Gemma achieves higher effective bandwidth utilization (29% vs 25%) — its smaller weight matrices fit more efficiently into the CPU's memory access pipeline, resulting in better bus utilization per thread. Both models are well below the 77 GB/s LPDDR5X ceiling; the bottleneck remains the CPU's ability to issue load instructions, not DRAM capacity.</p>
+  </div>
+
+  <hr>
+
+  <!-- FULL COMPARISON TABLE -->
+  <div class="section">
+    <div class="sec-label">06 — Full Comparison</div>
+    <h2>Complete Metrics Table</h2>
+
+    <table class="data-table">
+      <thead><tr><th>Metric</th><th>Gemma 2 2B</th><th>Phi-3 Mini</th><th>Winner</th></tr></thead>
+      <tbody>
+        <tr><td>Parameters</td><td>2.61 B</td><td>3.82 B</td><td><span class="verdict gemma">Gemma</span> smaller</td></tr>
+        <tr><td>Model file size</td><td class="vg">1.59 GiB</td><td class="vb">2.23 GiB</td><td><span class="verdict gemma">Gemma</span> −29%</td></tr>
+        <tr><td>Generation speed (4T)</td><td class="vg">14.16 ± 0.48 t/s</td><td class="vb">8.70 ± 0.68 t/s</td><td><span class="verdict gemma">Gemma</span> +63%</td></tr>
+        <tr><td>Generation speed (8T)</td><td class="vg">11.21 ± 1.19 t/s</td><td class="vb">6.81 ± 1.25 t/s</td><td><span class="verdict gemma">Gemma</span> +65%</td></tr>
+        <tr><td>Peak prefill (best)</td><td class="vg">71.62 t/s (pp256)</td><td class="vb">34.63 t/s (pp32)</td><td><span class="verdict gemma">Gemma</span> +107%</td></tr>
+        <tr><td>Prefill @ pp512</td><td class="vg">59.93 t/s</td><td class="vb">23.88 t/s</td><td><span class="verdict gemma">Gemma</span> +151%</td></tr>
+        <tr><td>TTFT @ 32 tokens</td><td class="vg">0.47 s</td><td class="vb">0.92 s</td><td><span class="verdict gemma">Gemma</span> 2.0×</td></tr>
+        <tr><td>TTFT @ 512 tokens</td><td class="vg">8.54 s</td><td class="vb">21.4 s</td><td><span class="verdict gemma">Gemma</span> 2.5×</td></tr>
+        <tr><td>8s TTFT threshold</td><td class="vg">~512 tokens</td><td class="vb">~230 tokens</td><td><span class="verdict gemma">Gemma</span> 2.2×</td></tr>
+        <tr><td>Effective bandwidth</td><td class="vg">22.5 GB/s (29%)</td><td class="vb">19.4 GB/s (25%)</td><td><span class="verdict gemma">Gemma</span></td></tr>
+        <tr><td>Prefill at 8T vs 4T</td><td class="vg">+16% (8T wins)</td><td class="vb">−2% (tie)</td><td><span class="verdict gemma">Gemma</span> more flexible</td></tr>
+        <tr><td>MMLU accuracy</td><td class="vo">~51.3%</td><td class="vb">~68.8%</td><td><span class="verdict phi">Phi-3</span> +17pts</td></tr>
+        <tr><td>Instruction following</td><td class="vg">Strong</td><td class="vg">Strong</td><td><span class="verdict tie">Tie</span></td></tr>
+        <tr><td>Context window</td><td>8,192 tokens</td><td>4,096 tokens</td><td><span class="verdict gemma">Gemma</span> 2×</td></tr>
+        <tr><td>Min RAM required</td><td class="vg">~2.4 GiB total</td><td class="vb">~3.0 GiB total</td><td><span class="verdict gemma">Gemma</span></td></tr>
+      </tbody>
+    </table>
+
+    <p style="font-size:0.82em;color:var(--muted);">MMLU figures are published benchmark values from model cards — not measured on-device. All speed, TTFT, and bandwidth figures are directly measured on this device.</p>
+  </div>
+
+  <hr>
+
+  <!-- WHEN TO USE WHICH -->
+  <div class="section">
+    <div class="sec-label">07 — Decision Guide</div>
+    <h2>When to Use Each Model</h2>
+
+    <table class="data-table">
+      <thead><tr><th>Use case</th><th>Best choice</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td>Interactive chat (short Q&amp;A)</td><td><span class="verdict gemma">Gemma 2 2B</span></td><td>14 t/s generation — responses stream noticeably faster</td></tr>
+        <tr><td>Document analysis / OCR pipeline</td><td><span class="verdict gemma">Gemma 2 2B</span></td><td>TTFT 8.5s vs 21.4s at 512-token input. Also supports 8K context.</td></tr>
+        <tr><td>Long conversations</td><td><span class="verdict gemma">Gemma 2 2B</span></td><td>8K context window vs 4K — fits 2× more history before truncation</td></tr>
+        <tr><td>RAM-constrained device (&lt;4 GB free)</td><td><span class="verdict gemma">Gemma 2 2B</span></td><td>1.59 GiB vs 2.23 GiB — fits in tighter memory budgets</td></tr>
+        <tr><td>Complex reasoning / coding</td><td><span class="verdict phi">Phi-3 Mini</span></td><td>MMLU 68.8% vs ~51.3% — meaningful accuracy gap on hard tasks</td></tr>
+        <tr><td>Math and factual precision</td><td><span class="verdict phi">Phi-3 Mini</span></td><td>Trained on high-quality curated data specifically for reasoning</td></tr>
+        <tr><td>Speed is priority, quality secondary</td><td><span class="verdict gemma">Gemma 2 2B</span></td><td>Faster on every speed metric</td></tr>
+        <tr><td>Quality is priority, speed secondary</td><td><span class="verdict phi">Phi-3 Mini</span></td><td>Higher benchmark scores despite being slower</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Summary:</strong> Gemma 2 2B wins on every performance metric — speed, TTFT, RAM, context window. Phi-3 Mini wins on quality benchmarks. For most everyday use (chat, summarization, OCR, Q&A) Gemma is the better default. Switch to Phi-3 when the task demands accuracy over speed.
+    </div>
+  </div>
+
+  <div style="margin-top:60px; padding-top:28px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+    <a href="article.html" style="font-size:0.83em;font-family:monospace;">← Full systems article</a>
+    <a href="https://github.com/destortion/llm-on-local-device" style="font-size:0.83em;font-family:monospace;">Raw benchmark logs on GitHub</a>
+    <a href="index.html" style="font-size:0.83em;font-family:monospace;">Project overview →</a>
+  </div>
+
+</div>
+
+<footer>
+  Satyam Sharma · <a href="https://destortion.github.io/Edge-ai-computing">Edge AI Blog</a> · 2026
+</footer>
+
+</body>
+</html>
