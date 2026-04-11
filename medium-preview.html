@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medium Preview — Gemma 2 2B vs Phi-3 Mini</title>
+<style>
+  /* Medium-accurate typography and layout */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #fff;
+    color: #242424;
+    font-family: charter, Georgia, Cambria, "Times New Roman", Times, serif;
+    line-height: 1.8;
+  }
+
+  /* ── Top nav bar ── */
+  .m-nav {
+    position: sticky; top: 0; z-index: 100;
+    background: #fff; border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: 0 24px; height: 57px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .m-nav-logo { font-family: 'Georgia', serif; font-size: 1.5em; font-weight: 700; color: #242424; letter-spacing: -0.5px; }
+  .m-nav-right { display: flex; align-items: center; gap: 16px; }
+  .m-btn { background: #1a8917; color: #fff; border: none; border-radius: 99px; padding: 7px 16px; font-size: 0.82em; font-family: -apple-system, sans-serif; cursor: pointer; font-weight: 500; }
+  .m-btn-ghost { background: none; border: none; color: #242424; font-size: 0.82em; font-family: -apple-system, sans-serif; cursor: pointer; }
+  .m-avatar { width: 32px; height: 32px; border-radius: 50%; background: #1a8917; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8em; font-weight: 700; font-family: sans-serif; }
+
+  /* ── Article container ── */
+  .m-article {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  /* ── Header ── */
+  .m-title {
+    font-size: 2.2em;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+    color: #242424;
+    margin-bottom: 16px;
+    font-family: charter, Georgia, serif;
+  }
+
+  .m-subtitle {
+    font-size: 1.25em;
+    color: #6b6b6b;
+    font-weight: 400;
+    line-height: 1.5;
+    margin-bottom: 28px;
+    font-family: charter, Georgia, serif;
+  }
+
+  /* ── Author row ── */
+  .m-author-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 0;
+    border-top: 1px solid rgba(0,0,0,0.08);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    margin-bottom: 32px;
+  }
+  .m-author-avatar { width: 44px; height: 44px; border-radius: 50%; background: #1a8917; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 1em; font-family: sans-serif; flex-shrink: 0; }
+  .m-author-info { flex: 1; }
+  .m-author-name { font-size: 0.9em; font-weight: 500; color: #242424; font-family: -apple-system, sans-serif; }
+  .m-author-meta { font-size: 0.82em; color: #6b6b6b; font-family: -apple-system, sans-serif; margin-top: 1px; }
+  .m-author-follow { font-size: 0.82em; color: #1a8917; font-family: -apple-system, sans-serif; cursor: pointer; background: none; border: none; padding: 0; }
+  .m-actions { display: flex; gap: 16px; align-items: center; }
+  .m-action-icon { color: #6b6b6b; font-size: 1.1em; cursor: pointer; background: none; border: none; }
+
+  /* ── Toolbar (clap / bookmark / share) ── */
+  .m-toolbar {
+    position: sticky; bottom: 0;
+    background: #fff; border-top: 1px solid rgba(0,0,0,0.08);
+    padding: 10px 24px;
+    display: flex; gap: 20px; align-items: center;
+    max-width: 680px; margin: 0 auto;
+  }
+  .m-tool { display: flex; align-items: center; gap: 6px; font-size: 0.82em; color: #6b6b6b; font-family: -apple-system, sans-serif; cursor: pointer; background: none; border: none; }
+
+  /* ── Body typography ── */
+  .m-article p {
+    font-size: 1.15em;
+    line-height: 1.85;
+    color: #242424;
+    margin-bottom: 24px;
+    font-family: charter, Georgia, Cambria, serif;
+  }
+
+  .m-article h2 {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: #242424;
+    margin: 44px 0 16px;
+    letter-spacing: -0.3px;
+    font-family: charter, Georgia, serif;
+  }
+
+  .m-article h3 {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: #242424;
+    margin: 32px 0 12px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .m-article em { font-style: italic; }
+  .m-article strong { font-weight: 700; }
+
+  /* ── Pull quote / italic intro ── */
+  .m-kicker {
+    font-size: 1.05em;
+    color: #6b6b6b;
+    font-style: italic;
+    border-left: 3px solid #242424;
+    padding-left: 20px;
+    margin: 28px 0;
+    font-family: charter, Georgia, serif;
+  }
+
+  /* ── Code inline ── */
+  .m-article code {
+    background: rgba(0,0,0,0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 0.88em;
+    color: #242424;
+  }
+
+  /* ── Divider ── */
+  .m-divider {
+    text-align: center;
+    margin: 36px 0;
+    color: #6b6b6b;
+    letter-spacing: 8px;
+    font-size: 1.1em;
+  }
+
+  /* ── Table ── */
+  .m-table-wrap { overflow-x: auto; margin: 28px 0; }
+  .m-table {
+    width: 100%; border-collapse: collapse;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.9em;
+  }
+  .m-table th {
+    border-bottom: 2px solid #242424;
+    text-align: left; padding: 8px 12px;
+    font-weight: 600; color: #242424;
+  }
+  .m-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    color: #242424;
+    vertical-align: top;
+  }
+  .m-table tr:last-child td { border-bottom: none; }
+  .m-table .win { font-weight: 700; color: #1a8917; }
+  .m-table .lose { color: #6b6b6b; }
+
+  /* ── Highlight box (callout) ── */
+  .m-highlight {
+    background: #faf9f7;
+    border-left: 4px solid #242424;
+    padding: 18px 22px;
+    margin: 28px 0;
+    font-family: charter, Georgia, serif;
+    font-size: 1.05em;
+    color: #242424;
+    line-height: 1.75;
+  }
+
+  /* ── Tags ── */
+  .m-tags {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin: 48px 0 32px;
+  }
+  .m-tag {
+    background: rgba(0,0,0,0.05);
+    border-radius: 99px;
+    padding: 6px 16px;
+    font-size: 0.82em;
+    color: #242424;
+    font-family: -apple-system, sans-serif;
+    cursor: pointer;
+  }
+  .m-tag:hover { background: rgba(0,0,0,0.1); }
+
+  /* ── More from author ── */
+  .m-more {
+    border-top: 1px solid rgba(0,0,0,0.12);
+    padding-top: 32px;
+    margin-top: 48px;
+  }
+  .m-more-label {
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b6b6b;
+    font-family: -apple-system, sans-serif;
+    margin-bottom: 20px;
+  }
+  .m-rec-card {
+    display: flex; gap: 16px; padding: 16px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    cursor: pointer;
+  }
+  .m-rec-card:last-child { border-bottom: none; }
+  .m-rec-thumb {
+    width: 80px; height: 60px; flex-shrink: 0;
+    background: #f0f0f0; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6em;
+  }
+  .m-rec-title {
+    font-size: 0.92em; font-weight: 700;
+    color: #242424; line-height: 1.35;
+    font-family: charter, Georgia, serif;
+    margin-bottom: 4px;
+  }
+  .m-rec-meta {
+    font-size: 0.78em; color: #6b6b6b;
+    font-family: -apple-system, sans-serif;
+  }
+
+  @media (max-width: 600px) {
+    .m-title { font-size: 1.7em; }
+    .m-article p { font-size: 1.05em; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="m-nav">
+  <div class="m-nav-logo">Medium</div>
+  <div class="m-nav-right">
+    <button class="m-btn-ghost">Sign in</button>
+    <button class="m-btn">Get started</button>
+  </div>
+</nav>
+
+<!-- Article -->
+<article class="m-article">
+
+  <h1 class="m-title">Gemma 2 2B vs Phi-3 Mini: What Actually Happens When You Benchmark Two SLMs on a Phone</h1>
+  <p class="m-subtitle">Both models. Same device. Same binary. No cloud.</p>
+
+  <!-- Author -->
+  <div class="m-author-row">
+    <div class="m-author-avatar">S</div>
+    <div class="m-author-info">
+      <div class="m-author-name">Satyam Sharma &nbsp;·&nbsp; <button class="m-author-follow">Follow</button></div>
+      <div class="m-author-meta">8 min read &nbsp;·&nbsp; Apr 12, 2026 &nbsp;·&nbsp; Published in <strong>Edge AI Computing</strong></div>
+    </div>
+    <div class="m-actions">
+      <button class="m-action-icon" title="Save">🔖</button>
+      <button class="m-action-icon" title="Share">⋯</button>
+    </div>
+  </div>
+
+  <!-- Setup -->
+  <h2>The Setup</h2>
+  <p>
+    I ran both Gemma 2 2B and Phi-3 Mini 3.8B — quantized to Q4_K_M — on a Samsung Galaxy S24
+    (Snapdragon 8 Gen 3, Android 14) using llama.cpp entirely CPU-side, no GPU, no NPU.
+    Each model was benchmarked using llama.cpp's built-in <code>llama-bench</code> tool:
+    five prompt lengths from 32 to 512 tokens for prefill speed, plus token generation at both
+    4 and 8 threads, each configuration repeated three times and averaged. The result is
+    10 data points per model, all measured on identical hardware under identical conditions.
+  </p>
+
+  <div class="m-divider">· · ·</div>
+
+  <!-- Finding 1 -->
+  <h2>Finding 1: Gemma's Prefill Curve Is Inverted</h2>
+  <p>
+    This was the unexpected result. On Phi-3 Mini, prefill throughput <em>falls</em> as prompts
+    get longer — from 34.63 t/s at 32 tokens down to 23.88 t/s at 512 tokens. That's the
+    expected pattern: longer prompts mean quadratic attention growth, so throughput degrades.
+  </p>
+  <p>
+    Gemma 2 2B does the opposite. Throughput <em>rises</em> from 68.77 t/s at 32 tokens to a
+    peak of 71.62 t/s at 256 tokens before dropping to 59.93 t/s at 512 tokens. The model is
+    getting more efficient as prompts grow, not less.
+  </p>
+  <p>
+    The likely explanation: Gemma's smaller weight matrices (2.61B vs 3.82B parameters) allow
+    llama.cpp's SIMD-optimised batch matrix operations to hit a more efficient compute regime
+    at medium batch sizes. The prefill pass is compute-bound for Gemma in a way it isn't for
+    Phi-3, and the compute utilization improves with batch size up to a point.
+  </p>
+  <div class="m-highlight">
+    <strong>The practical implication:</strong> Gemma doesn't just start faster — it <em>stays</em>
+    faster proportionally as your prompts grow.
+  </div>
+
+  <div class="m-divider">· · ·</div>
+
+  <!-- Finding 2 -->
+  <h2>Finding 2: The 8-Second UX Boundary Moves</h2>
+  <p>
+    Time to First Token (TTFT) is the wall-clock wait before the first word appears. It's
+    entirely determined by prefill speed and prompt length. Here's what it looks like across
+    three representative prompt lengths:
+  </p>
+
+  <div class="m-table-wrap">
+    <table class="m-table">
+      <thead>
+        <tr>
+          <th>Prompt</th>
+          <th>Gemma 2 2B</th>
+          <th>Phi-3 Mini</th>
+          <th>Gemma faster by</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Short (~25 words / 32 tokens)</td>
+          <td class="win">0.47 s</td>
+          <td class="lose">0.92 s</td>
+          <td class="win">2.0×</td>
+        </tr>
+        <tr>
+          <td>Medium (~100 words / 128 tokens)</td>
+          <td class="win">1.79 s</td>
+          <td class="lose">4.31 s</td>
+          <td class="win">2.4×</td>
+        </tr>
+        <tr>
+          <td>Long (~400 words / 512 tokens)</td>
+          <td class="win">8.54 s</td>
+          <td class="lose">21.4 s</td>
+          <td class="win">2.5×</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    UX research consistently puts the "this feels broken" threshold at around 8–10 seconds of
+    no feedback. Phi-3 crosses that threshold at roughly 230 tokens — about a 175-word prompt.
+    Gemma crosses it at 512 tokens — roughly 400 words.
+  </p>
+  <div class="m-highlight">
+    <strong>In practice:</strong> every real-world input that would make Phi-3 feel sluggish
+    falls within Gemma's responsive range. Document summarization, OCR output, pasted articles —
+    these all sit in the 200–500 token range where the difference is between a spinner and a wall.
+  </div>
+
+  <div class="m-divider">· · ·</div>
+
+  <!-- Finding 3 -->
+  <h2>Finding 3: The Thread Config That Changes the Calculus</h2>
+  <p>
+    For token <em>generation</em>, both models confirm the same rule: use 4 threads (performance
+    cores only), not 8. Adding the efficiency cores creates big.LITTLE synchronization overhead
+    that costs ~21% throughput on both models.
+  </p>
+  <p>
+    For <em>prefill</em>, Gemma breaks the rule. At 8 threads, Gemma's prefill speed rises to
+    72.41 t/s — a 16% improvement over its 4-thread figure. Phi-3 sees no meaningful gain.
+    Gemma's smaller weight matrices give the efficiency cores enough useful work to do without
+    hitting the synchronization bottleneck.
+  </p>
+  <div class="m-highlight">
+    <strong>The config implication:</strong> for workloads that involve long inputs and short
+    outputs — document Q&A, summarization, OCR analysis — you can run Gemma at 8 threads and
+    get faster TTFT with acceptable generation speed. That option simply doesn't exist for Phi-3.
+  </div>
+
+  <div class="m-divider">· · ·</div>
+
+  <!-- Final Verdict -->
+  <h2>Final Verdict</h2>
+  <p>
+    <strong>Choose Gemma 2 2B if</strong> speed and responsiveness are the priority. It generates
+    63% faster, processes long prompts 2.5× sooner, fits in 29% less RAM, and supports an 8K
+    context window vs Phi-3's 4K. For interactive chat, document pipelines, and OCR workflows,
+    it is the better default on current Android hardware.
+  </p>
+  <p>
+    <strong>Choose Phi-3 Mini if</strong> accuracy matters more than speed. Its MMLU score
+    (~68.8%) outpaces Gemma (~51.3%) by a meaningful margin. For complex reasoning, multi-step
+    math, or code generation where correctness is non-negotiable, the quality gap justifies
+    the wait.
+  </p>
+  <p>
+    The right answer for most use cases: Gemma for day-to-day use, Phi-3 when the task demands
+    it. The Sara Chat UI now lets you switch between them in under 30 seconds without touching
+    the terminal.
+  </p>
+
+  <div class="m-kicker">
+    Full benchmark data and raw logs available at
+    github.com/destortion/llm-on-local-device
+  </div>
+
+  <!-- Tags -->
+  <div class="m-tags">
+    <span class="m-tag">Artificial Intelligence</span>
+    <span class="m-tag">Android</span>
+    <span class="m-tag">Machine Learning</span>
+    <span class="m-tag">Edge Computing</span>
+    <span class="m-tag">LLM</span>
+    <span class="m-tag">Benchmarking</span>
+  </div>
+
+  <!-- Clap / toolbar -->
+  <div style="display:flex; gap:20px; align-items:center; padding: 16px 0; border-top:1px solid rgba(0,0,0,0.1); border-bottom:1px solid rgba(0,0,0,0.1); margin-bottom:40px;">
+    <button class="m-tool" style="font-family:-apple-system,sans-serif;cursor:pointer;background:none;border:none;display:flex;align-items:center;gap:6px;font-size:0.9em;color:#6b6b6b;">
+      👏 <span>248</span>
+    </button>
+    <button class="m-tool" style="font-family:-apple-system,sans-serif;cursor:pointer;background:none;border:none;display:flex;align-items:center;gap:6px;font-size:0.9em;color:#6b6b6b;">
+      💬 <span>14 responses</span>
+    </button>
+    <div style="flex:1"></div>
+    <button class="m-tool" style="font-family:-apple-system,sans-serif;cursor:pointer;background:none;border:none;font-size:1.1em;">🔖</button>
+    <button class="m-tool" style="font-family:-apple-system,sans-serif;cursor:pointer;background:none;border:none;font-size:1.1em;">⋯</button>
+  </div>
+
+  <!-- More from author -->
+  <div class="m-more">
+    <div class="m-more-label">More from Satyam Sharma</div>
+    <div class="m-rec-card">
+      <div class="m-rec-thumb">📱</div>
+      <div>
+        <div class="m-rec-title">Running a 3.8B LLM on a Phone: A Rigorous Systems Analysis</div>
+        <div class="m-rec-meta">Satyam Sharma &nbsp;·&nbsp; 14 min read</div>
+      </div>
+    </div>
+    <div class="m-rec-card">
+      <div class="m-rec-thumb">⏱</div>
+      <div>
+        <div class="m-rec-title">Time to First Token: Prefill Speed of a 3.8B LLM on a Phone</div>
+        <div class="m-rec-meta">Satyam Sharma &nbsp;·&nbsp; 8 min read</div>
+      </div>
+    </div>
+  </div>
+
+</article>
+
+</body>
+</html>
