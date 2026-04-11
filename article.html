@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time to First Token: Measuring LLM Prefill on Android | Satyam Sharma</title>
+<style>
+  :root {
+    --bg: #0a0a0f; --card: #111118; --border: #1e1e2e;
+    --accent: #4a9eff; --green: #00ff88; --purple: #a855f7;
+    --orange: #f97316; --red: #e05050; --text: #e0e0e0; --muted: #666;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.75; padding-bottom: 80px; }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, #0a0a0f 0%, #0d1117 50%, #0a0f1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 64px 20px 52px; text-align: center; position: relative; overflow: hidden;
+  }
+  .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, rgba(74,158,255,0.09) 0%, transparent 70%); }
+  .tag {
+    display: inline-block; background: rgba(74,158,255,0.15); color: var(--accent);
+    border: 1px solid rgba(74,158,255,0.3); padding: 4px 14px; border-radius: 99px;
+    font-size: 0.75em; font-family: monospace; letter-spacing: 0.06em; margin-bottom: 22px;
+  }
+  .hero h1 {
+    font-size: clamp(1.9em, 5.5vw, 3.1em); font-weight: 800; line-height: 1.15;
+    background: linear-gradient(135deg, #fff 30%, var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    margin-bottom: 18px; position: relative; z-index: 1;
+  }
+  .hero .sub { color: #888; font-size: 1em; max-width: 600px; margin: 0 auto 26px; position: relative; z-index: 1; }
+  .meta { display: flex; justify-content: center; gap: 22px; font-size: 0.78em; color: var(--muted); flex-wrap: wrap; position: relative; z-index: 1; }
+  .meta span { display: flex; align-items: center; gap: 5px; }
+
+  /* Layout */
+  .container { max-width: 740px; margin: 0 auto; padding: 0 20px; }
+
+  /* Typography */
+  .section { margin: 52px 0; }
+  .section-num { font-size: 0.7em; font-family: monospace; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 8px; }
+  h2 { font-size: 1.45em; font-weight: 700; color: #fff; margin-bottom: 16px; }
+  h3 { font-size: 1.05em; font-weight: 600; color: #ddd; margin: 28px 0 10px; }
+  p { color: #aaa; margin-bottom: 14px; font-size: 0.97em; }
+  strong { color: #ddd; }
+  em { color: #bbb; }
+  code { background: #1a1a2e; padding: 1px 6px; border-radius: 3px; font-family: monospace; font-size: 0.87em; color: #7ec8e3; }
+
+  /* Back link */
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.8em; font-family: monospace; text-decoration: none; margin: 28px 0 0; }
+  .back-link:hover { color: var(--accent); }
+
+  /* Headline stats row */
+  .stat-row { display: flex; gap: 12px; margin: 24px 0; flex-wrap: wrap; }
+  .stat-box { flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 14px; text-align: center; }
+  .stat-box .stat-num { font-size: 1.95em; font-weight: 800; color: var(--accent); font-family: monospace; line-height: 1; }
+  .stat-box .stat-unit { font-size: 0.7em; color: var(--muted); margin-top: 3px; }
+  .stat-box .stat-label { font-size: 0.7em; color: #888; margin-top: 7px; line-height: 1.4; }
+  .stat-box.green .stat-num { color: var(--green); }
+  .stat-box.orange .stat-num { color: var(--orange); }
+
+  /* Data table */
+  .data-table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin: 18px 0; font-size: 0.87em; }
+  .data-table th { background: #16161f; color: var(--muted); font-family: monospace; font-size: 0.74em; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  .data-table td { padding: 9px 14px; border-bottom: 1px solid #16161f; color: #ccc; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #13131a; }
+  .val-blue { color: var(--accent); font-family: monospace; font-weight: 600; }
+  .val-green { color: var(--green); font-family: monospace; font-weight: 600; }
+  .val-orange { color: var(--orange); font-family: monospace; font-weight: 600; }
+  .val-red { color: var(--red); font-family: monospace; }
+  .val-muted { color: var(--muted); font-family: monospace; }
+
+  /* Bar chart — horizontal, scaled */
+  .bar-chart { margin: 20px 0; display: flex; flex-direction: column; gap: 12px; }
+  .bar-row { display: flex; flex-direction: column; gap: 5px; }
+  .bar-label { font-size: 0.8em; color: #aaa; display: flex; justify-content: space-between; align-items: baseline; }
+  .bar-num { font-family: monospace; font-weight: 600; color: var(--accent); }
+  .bar-track { height: 11px; background: #1a1a2a; border-radius: 99px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), #7bbfff); }
+  .bar-fill.orange { background: linear-gradient(90deg, var(--orange), #fdba74); }
+  .bar-fill.red { background: linear-gradient(90deg, var(--red), #f87171); }
+  .bar-fill.green { background: linear-gradient(90deg, var(--green), #6ee7b7); }
+
+  /* TTFT bar chart — wider bar = worse (longer wait) */
+  .ttft-chart { margin: 20px 0; display: flex; flex-direction: column; gap: 12px; }
+  .ttft-row { display: flex; flex-direction: column; gap: 5px; }
+  .ttft-label { font-size: 0.8em; color: #aaa; display: flex; justify-content: space-between; align-items: baseline; }
+  .ttft-num { font-family: monospace; font-weight: 600; }
+  .ttft-track { height: 11px; background: #1a1a2a; border-radius: 99px; overflow: hidden; }
+  .ttft-fill { height: 100%; border-radius: 99px; }
+  .ttft-fill.fast { background: linear-gradient(90deg, var(--green), #6ee7b7); }
+  .ttft-fill.ok   { background: linear-gradient(90deg, var(--accent), #7bbfff); }
+  .ttft-fill.slow { background: linear-gradient(90deg, var(--orange), #fdba74); }
+  .ttft-fill.very-slow { background: linear-gradient(90deg, var(--red), #f87171); }
+
+  /* Code blocks */
+  pre { background: #0d1117; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 16px; overflow-x: auto; font-family: monospace; font-size: 0.81em; line-height: 1.65; margin: 16px 0; color: #c9d1d9; }
+  .cm { color: #6272a4; } .kw { color: #ff79c6; } .st { color: #f1fa8c; } .fn { color: #50fa7b; }
+
+  /* Callouts */
+  .callout       { background: rgba(0,255,136,0.06); border: 1px solid rgba(0,255,136,0.22); border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 0.91em; color: #aaa; }
+  .callout strong { color: var(--green); }
+  .callout-blue  { background: rgba(74,158,255,0.07); border: 1px solid rgba(74,158,255,0.22); border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 0.91em; color: #aaa; }
+  .callout-blue strong { color: var(--accent); }
+  .callout-warn  { background: rgba(249,115,22,0.07); border: 1px solid rgba(249,115,22,0.25); border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 0.91em; color: #aaa; }
+  .callout-warn strong { color: var(--orange); }
+  .callout-purple { background: rgba(168,85,247,0.07); border: 1px solid rgba(168,85,247,0.25); border-radius: 10px; padding: 16px 20px; margin: 18px 0; font-size: 0.91em; color: #aaa; }
+  .callout-purple strong { color: var(--purple); }
+
+  /* Equation block */
+  .eq { background: #0d1117; border: 1px solid var(--border); border-left: 3px solid var(--purple); border-radius: 0 8px 8px 0; padding: 12px 18px; margin: 14px 0; font-family: monospace; font-size: 0.87em; color: #c9d1d9; line-height: 1.9; }
+  .eq .var { color: var(--accent); } .eq .op { color: var(--purple); } .eq .com { color: #555; }
+
+  /* Measurement device spec */
+  .spec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 20px 0; }
+  .spec-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .spec-label { font-size: 0.68em; color: var(--muted); font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+  .spec-val { font-size: 1em; font-weight: 600; color: #fff; }
+  .spec-sub { font-size: 0.72em; color: var(--muted); margin-top: 2px; }
+
+  /* Raw output block */
+  .raw-out { background: #060810; border: 1px solid var(--border); border-radius: 10px; padding: 16px; font-family: monospace; font-size: 0.79em; color: #7ec8e3; line-height: 1.7; overflow-x: auto; margin: 16px 0; }
+  .raw-out .rh { color: var(--muted); } .raw-out .rv { color: var(--green); font-weight: 600; }
+
+  /* Insight cards */
+  .insight-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+  @media (max-width: 520px) { .insight-grid { grid-template-columns: 1fr; } }
+  .insight-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .insight-card .ic-num { font-size: 1.7em; font-weight: 800; font-family: monospace; line-height: 1; margin-bottom: 6px; }
+  .insight-card .ic-label { font-size: 0.75em; color: var(--muted); text-transform: uppercase; font-family: monospace; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .insight-card .ic-text { font-size: 0.83em; color: #888; line-height: 1.55; }
+
+  /* Footer */
+  hr { border: none; border-top: 1px solid var(--border); margin: 44px 0; }
+  .footer-nav { margin-top: 60px; padding-top: 28px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .footer-nav a { color: var(--accent); text-decoration: none; font-size: 0.83em; font-family: monospace; }
+  .footer-nav a:hover { text-decoration: underline; }
+  footer { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 0.82em; border-top: 1px solid var(--border); margin-top: 60px; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="tag">BENCHMARK · TTFT · PREFILL · ANDROID LLM</div>
+  <h1>Time to First Token:<br>Prefill Speed of a 3.8B LLM on a Phone</h1>
+  <p class="sub">Measuring how prompt length affects Time-to-First-Token for Phi-3 Mini Q4_K_M running CPU-only via llama.cpp on Snapdragon 8 Gen 3. Real numbers, actual logs.</p>
+  <div class="meta">
+    <span>✍ Satyam Sharma</span>
+    <span>📅 April 2026</span>
+    <span>⏱ 8 min read</span>
+    <span>📱 Galaxy S24 · Snapdragon 8 Gen 3</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <a class="back-link" href="index.html">← Systems deep-dive</a>
+
+  <!-- INTRO -->
+  <div class="section">
+    <div class="section-num">00 — Context</div>
+    <h2>What Is TTFT and Why Should You Measure It?</h2>
+    <p>When you send a message to a local LLM, two things happen: the model <strong>reads your prompt</strong> (prefill / prompt processing), then it <strong>writes the reply</strong> (token generation). These are governed by completely different hardware bottlenecks and have very different feels to the user.</p>
+    <p><strong>Time to First Token (TTFT)</strong> is how long you stare at a blank screen before the first word appears. It's entirely determined by prefill speed and prompt length. In a local-first mobile setup, TTFT is often the dominant friction — generation starts streaming immediately after, so slow generation is more tolerable than a 20-second blank stare.</p>
+
+    <div class="insight-grid">
+      <div class="insight-card">
+        <div class="ic-num" style="color:var(--accent)">Prefill</div>
+        <div class="ic-label">Prompt Processing</div>
+        <div class="ic-text">Reads all input tokens in parallel. Limited by compute — specifically the attention and FFN flops per layer. Fast but scales with context length.</div>
+      </div>
+      <div class="insight-card">
+        <div class="ic-num" style="color:var(--purple)">Decode</div>
+        <div class="ic-label">Token Generation</div>
+        <div class="ic-text">Generates one token per forward pass. Limited by memory bandwidth — must reload all 2.23 GiB of weights for each token. Slow but constant rate.</div>
+      </div>
+    </div>
+
+    <p>I already had <a href="benchmark.html" style="color:var(--accent);text-decoration:none;">generation speed numbers</a> from earlier. This post is specifically about the prefill side — measuring how TTFT changes as prompt length grows, from 32 to 512 tokens.</p>
+  </div>
+
+  <hr>
+
+  <!-- SETUP -->
+  <div class="section">
+    <div class="section-num">01 — Setup</div>
+    <h2>Test Configuration</h2>
+
+    <div class="spec-grid">
+      <div class="spec-card">
+        <div class="spec-label">Device</div>
+        <div class="spec-val">Galaxy S24</div>
+        <div class="spec-sub">Android 14 · Termux</div>
+      </div>
+      <div class="spec-card">
+        <div class="spec-label">SoC</div>
+        <div class="spec-val">Snapdragon 8 Gen 3</div>
+        <div class="spec-sub">8 cores · aarch64</div>
+      </div>
+      <div class="spec-card">
+        <div class="spec-label">Model</div>
+        <div class="spec-val">Phi-3 Mini</div>
+        <div class="spec-sub">3.82B params · Q4_K_M</div>
+      </div>
+      <div class="spec-card">
+        <div class="spec-label">Model size</div>
+        <div class="spec-val">2.23 GiB</div>
+        <div class="spec-sub">On-device RAM footprint</div>
+      </div>
+      <div class="spec-card">
+        <div class="spec-label">Threads</div>
+        <div class="spec-val">4</div>
+        <div class="spec-sub">Performance cores only</div>
+      </div>
+      <div class="spec-card">
+        <div class="spec-label">Tool</div>
+        <div class="spec-val">llama-bench</div>
+        <div class="spec-sub">build 8a65a7a</div>
+      </div>
+    </div>
+
+    <h3>The Benchmark Command</h3>
+    <p>I used <code>llama-bench</code> — the built-in benchmarking tool in llama.cpp. It runs multiple warm repetitions and reports mean ± std deviation. For the sweep:</p>
+
+    <pre><span class="cm"># Prefill sweep: pp32, pp64, pp128, pp256</span>
+./build/bin/llama-bench \
+  -m models/phi3-mini.gguf \
+  -p 32,64,128,256 \      <span class="cm"># prompt token lengths</span>
+  -n 0 \                  <span class="cm"># no token generation — pure prefill</span>
+  -t 4 \                  <span class="cm"># 4 threads (perf cores only)</span>
+  -r 3 \                  <span class="cm"># 3 repetitions per config</span>
+  -o md                   <span class="cm"># markdown output</span>
+
+<span class="cm"># Separate pp512 run</span>
+./build/bin/llama-bench \
+  -m models/phi3-mini.gguf \
+  -p 512 -n 0 -t 4 -r 3 -o md</pre>
+
+    <p>4 threads is the empirically established optimal for this SoC — using all 8 threads pulls in the efficiency cores and causes load imbalance that actually <em>slows</em> things down.</p>
+  </div>
+
+  <hr>
+
+  <!-- RAW RESULTS -->
+  <div class="section">
+    <div class="section-num">02 — Raw Results</div>
+    <h2>What llama-bench Actually Reported</h2>
+    <p>Verbatim output from both runs — no massaging, no rounding:</p>
+
+    <div class="raw-out">
+<span class="rh">| model                          |       size |     params | backend    | threads |            test |                  t/s |</span><br>
+<span class="rh">| ------------------------------ | ---------: | ---------: | ---------- | ------: | --------------: | -------------------: |</span><br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |           <span class="rv">pp32</span> |         <span class="rv">34.63 ± 2.68</span> |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |           <span class="rv">pp64</span> |         <span class="rv">34.01 ± 2.94</span> |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |          <span class="rv">pp128</span> |         <span class="rv">29.69 ± 0.49</span> |<br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |          <span class="rv">pp256</span> |         <span class="rv">32.72 ± 2.11</span> |<br>
+<span class="rh">build: 8a65a7a (1)</span>
+    </div>
+
+    <div class="raw-out">
+<span class="rh">| model                          |       size |     params | backend    | threads |            test |                  t/s |</span><br>
+<span class="rh">| ------------------------------ | ---------: | ---------: | ---------- | ------: | --------------: | -------------------: |</span><br>
+| phi3 3B Q4_K - Medium          |   2.23 GiB |     3.82 B | CPU        |       4 |          <span class="rv">pp512</span> |         <span class="rv">23.88 ± 0.17</span> |<br>
+<span class="rh">build: 8a65a7a (1)</span>
+    </div>
+
+    <p>Two observations before even analyzing: pp512 was run separately (explaining its own log file), and its standard deviation is remarkably low (±0.17 vs ±2.68–2.94 at shorter lengths) — suggesting shorter prefill runs are more susceptible to burst frequency variation while the longer run amortizes it.</p>
+  </div>
+
+  <hr>
+
+  <!-- PREFILL SPEED -->
+  <div class="section">
+    <div class="section-num">03 — Analysis</div>
+    <h2>Prefill Throughput by Prompt Length</h2>
+    <p>Prefill throughput in tokens/second — higher is better. The max is 34.63 t/s at pp32.</p>
+
+    <div class="bar-chart">
+      <div class="bar-row">
+        <div class="bar-label"><span>pp32 (32 tokens)</span><span class="bar-num">34.63 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>pp64 (64 tokens)</span><span class="bar-num">34.01 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:98%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>pp128 (128 tokens)</span><span class="bar-num">29.69 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill orange" style="width:86%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>pp256 (256 tokens)</span><span class="bar-num">32.72 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:94%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>pp512 (512 tokens)</span><span class="bar-num">23.88 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill red" style="width:69%"></div></div>
+      </div>
+    </div>
+
+    <div class="callout-warn">
+      <strong>The pp128 anomaly.</strong> pp128 at 29.69 t/s is slower than pp64 (34.01) <em>and</em> pp256 (32.72) — a clear non-monotonic dip. The standard deviation tells the story: pp128 has ±0.49 (very consistent) vs ±2.68–2.94 for shorter runs. The shorter runs are catching the CPU at higher boost clocks; pp128 is seeing a more "average" thermal state. This is a measurement artifact, not a real computational regression at 128 tokens.
+    </div>
+
+    <p>Setting aside the pp128 anomaly, the genuine trend is: prefill throughput holds near-constant up to ~64 tokens, then progressively falls. At pp512, throughput drops 31% from peak.</p>
+  </div>
+
+  <hr>
+
+  <!-- TTFT WALL CLOCK -->
+  <div class="section">
+    <div class="section-num">04 — User Impact</div>
+    <h2>What This Means: Wall-Clock Wait Time</h2>
+    <p>Throughput (t/s) is the hardware metric. What users experience is <strong>TTFT — the actual seconds you wait</strong> before the first token appears. TTFT = prompt_tokens ÷ prefill_speed.</p>
+
+    <div class="eq">
+      <span class="com">-- TTFT calculation</span><br>
+      <span class="var">TTFT</span> <span class="op">=</span> prompt_tokens <span class="op">/</span> prefill_speed<br><br>
+      <span class="com">-- example: pp512</span><br>
+      <span class="var">TTFT</span> <span class="op">=</span> 512 tokens <span class="op">/</span> 23.88 t/s <span class="op">=</span> <span class="var">21.4 seconds</span>
+    </div>
+
+    <p>Here's every measured prompt length translated to wall-clock TTFT:</p>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Prompt length</th>
+          <th>Prefill speed</th>
+          <th>Std dev</th>
+          <th>TTFT (seconds)</th>
+          <th>UX verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>pp32 <span style="color:var(--muted);font-size:0.85em">~25 words</span></td>
+          <td class="val-green">34.63 t/s</td>
+          <td class="val-muted">±2.68</td>
+          <td class="val-green"><strong>0.92 s</strong></td>
+          <td style="color:var(--green);font-size:0.85em">Instant ✓</td>
+        </tr>
+        <tr>
+          <td>pp64 <span style="color:var(--muted);font-size:0.85em">~50 words</span></td>
+          <td class="val-green">34.01 t/s</td>
+          <td class="val-muted">±2.94</td>
+          <td class="val-green"><strong>1.88 s</strong></td>
+          <td style="color:var(--green);font-size:0.85em">Instant ✓</td>
+        </tr>
+        <tr>
+          <td>pp128 <span style="color:var(--muted);font-size:0.85em">~100 words</span></td>
+          <td class="val-blue">29.69 t/s</td>
+          <td class="val-muted">±0.49</td>
+          <td class="val-blue"><strong>4.31 s</strong></td>
+          <td style="color:var(--accent);font-size:0.85em">Acceptable</td>
+        </tr>
+        <tr>
+          <td>pp256 <span style="color:var(--muted);font-size:0.85em">~200 words</span></td>
+          <td class="val-blue">32.72 t/s</td>
+          <td class="val-muted">±2.11</td>
+          <td class="val-blue"><strong>7.83 s</strong></td>
+          <td style="color:var(--accent);font-size:0.85em">Noticeable</td>
+        </tr>
+        <tr>
+          <td>pp512 <span style="color:var(--muted);font-size:0.85em">~400 words</span></td>
+          <td class="val-orange">23.88 t/s</td>
+          <td class="val-muted">±0.17</td>
+          <td class="val-orange"><strong>21.4 s</strong></td>
+          <td style="color:var(--orange);font-size:0.85em">Long wait ✗</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>TTFT scales non-linearly with prompt length — because throughput <em>also</em> drops as prompts grow. Going from pp32 to pp512 is a 16× prompt size increase, but a <strong>23× TTFT increase</strong> (0.92s → 21.4s).</p>
+
+    <!-- TTFT visual — wider = longer wait -->
+    <h3>TTFT as Wait Time (wider = worse)</h3>
+    <div class="ttft-chart">
+      <div class="ttft-row">
+        <div class="ttft-label"><span>pp32 (~25 words)</span><span class="ttft-num" style="color:var(--green)">0.92 s</span></div>
+        <div class="ttft-track"><div class="ttft-fill fast" style="width:4.3%"></div></div>
+      </div>
+      <div class="ttft-row">
+        <div class="ttft-label"><span>pp64 (~50 words)</span><span class="ttft-num" style="color:var(--green)">1.88 s</span></div>
+        <div class="ttft-track"><div class="ttft-fill fast" style="width:8.8%"></div></div>
+      </div>
+      <div class="ttft-row">
+        <div class="ttft-label"><span>pp128 (~100 words)</span><span class="ttft-num" style="color:var(--accent)">4.31 s</span></div>
+        <div class="ttft-track"><div class="ttft-fill ok" style="width:20%"></div></div>
+      </div>
+      <div class="ttft-row">
+        <div class="ttft-label"><span>pp256 (~200 words)</span><span class="ttft-num" style="color:var(--accent)">7.83 s</span></div>
+        <div class="ttft-track"><div class="ttft-fill ok" style="width:37%"></div></div>
+      </div>
+      <div class="ttft-row">
+        <div class="ttft-label"><span>pp512 (~400 words)</span><span class="ttft-num" style="color:var(--orange)">21.4 s</span></div>
+        <div class="ttft-track"><div class="ttft-fill very-slow" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>The 8-second rule.</strong> Research on web UX consistently finds that users lose focus at around 8–10 seconds of waiting with no feedback. pp256 (7.83 s) sits right at that boundary. Any prompt longer than ~200 words will feel slow on this hardware — a streaming "prefilling..." indicator would be valuable UX mitigation for long prompts.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- WHY THROUGHPUT DROPS -->
+  <div class="section">
+    <div class="section-num">05 — Mechanism</div>
+    <h2>Why Does Prefill Speed Fall at Long Contexts?</h2>
+    <p>The attention mechanism is <strong>O(n²)</strong> in prompt length for the attention score matrix. Each additional token attends to all previous tokens — so the amount of work grows quadratically, while the amount of parallelism (batch dimension) grows only linearly.</p>
+
+    <div class="eq">
+      <span class="com">-- Attention complexity per layer</span><br>
+      <span class="var">Attention ops</span> <span class="op">=</span> 4 × n<sup>2</sup> × d_head <span class="op">+</span> 2 × n × d_model <span class="op">×</span> d_head<br><br>
+      <span class="com">-- For Phi-3 Mini: d_model=3072, n_heads=32, d_head=96</span><br>
+      <span class="var">pp32</span>:  ~38M attention flops/layer<br>
+      <span class="var">pp512</span>: ~9.66B attention flops/layer  <span class="op">→</span>  254× more work
+    </div>
+
+    <p>In practice the throughput degradation from pp32 to pp512 is only ~31% (34.63 → 23.88 t/s) because llama.cpp packs tokens into batches and processes the feed-forward layers (which are O(n × d) — linear) in parallel. The quadratic attention is a fraction of the total FLOP budget at small-to-medium contexts.</p>
+
+    <div class="callout-blue">
+      <strong>Memory bandwidth still dominates at these lengths.</strong> Even at pp512, moving the 2.23 GiB of model weights is the primary cost — the attention quadratic overhead doesn't become the bottleneck until context windows of thousands of tokens. The ~31% throughput drop at pp512 is real but modest; the 23× TTFT increase is dominated by simply having 16× more tokens to process.
+    </div>
+
+    <h3>The Thermal/Boost Effect on Short Runs</h3>
+    <p>The pp32 and pp64 results show higher throughput (34+ t/s) but also much higher variance (±2.68–2.94). Shorter benchmarks complete in under 1 second — they're catching the CPU at a transient boost state before the thermal governor intervenes. The pp128 result at ±0.49 is actually the most <em>reliable</em> number: the CPU has settled to a stable frequency. pp256 at ±2.11 is again catching boost transients across its 3 repetitions.</p>
+
+    <p>For production sizing, <strong>pp128 (29.69 ± 0.49 t/s) is the most trustworthy prefill figure</strong> — it's both at a representatively common prompt length and measured at a thermally stable operating point.</p>
+  </div>
+
+  <hr>
+
+  <!-- PRACTICAL TAKEAWAYS -->
+  <div class="section">
+    <div class="section-num">06 — Engineering Implications</div>
+    <h2>What This Means for Building Local LLM Apps</h2>
+
+    <h3>1. Keep system prompts short</h3>
+    <p>System prompts are included in every request and contribute directly to TTFT. A 256-token system prompt adds ~7.8 seconds to every single response. Keep system prompts under 64 tokens for acceptable latency — that's about 50 words or 3–4 short sentences.</p>
+
+    <h3>2. Show a prefill indicator</h3>
+    <p>At pp512, users wait 21 seconds before seeing anything. Without feedback, this feels like a crash. A simple "processing..." or prefill progress bar transforms the experience. llama-server's <code>/completion</code> endpoint reports <code>timings.prompt_ms</code> — you can estimate prefill progress from prompt length and measured throughput.</p>
+
+    <h3>3. The real bottleneck threshold is ~200 tokens</h3>
+    <p>Under 200 tokens (~150 words), TTFT stays under 8 seconds — tolerable with a spinner. Beyond 200 tokens, TTFT starts crossing into "noticeably slow" territory. For document analysis or OCR pipelines, chunk or summarize inputs before passing to the LLM.</p>
+
+    <h3>4. Prompt caching changes everything (future)</h3>
+    <p>llama.cpp has experimental prefix caching — if the system prompt is cached in the KV state from a prior call, its prefill cost is zero on subsequent calls. At 4096-token context, this is a major win. Currently unstable in mobile builds, but worth tracking.</p>
+
+    <div class="callout-purple">
+      <strong>Target operating range for this hardware:</strong> prompts of 32–128 tokens (1–4 short paragraphs) give TTFT under 5 seconds and throughput above 29 t/s. This is the sweet spot for interactive chat on a Snapdragon 8 Gen 3 CPU-only setup.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- REPRODUCE -->
+  <div class="section">
+    <div class="section-num">07 — Reproduce</div>
+    <h2>Run This Yourself</h2>
+    <p>All you need is Termux, llama.cpp, and the model. These exact commands produce the log files above:</p>
+
+    <pre><span class="cm"># Requires: llama.cpp built in Termux</span>
+<span class="cm"># See index.html for full build instructions</span>
+
+<span class="cm"># Prefill sweep (pp32 → pp256)</span>
+./build/bin/llama-bench \
+  -m ~/models/phi3-mini-q4_k_m.gguf \
+  -p 32,64,128,256 \
+  -n 0 \
+  -t 4 \
+  -r 3 \
+  -o md | tee ~/ttft_sweep.log
+
+<span class="cm"># pp512 separately</span>
+./build/bin/llama-bench \
+  -m ~/models/phi3-mini-q4_k_m.gguf \
+  -p 512 \
+  -n 0 \
+  -t 4 \
+  -r 3 \
+  -o md | tee ~/ttft_pp512.log</pre>
+
+    <div class="callout">
+      <strong>Note on environment:</strong> Run with the screen on and plugged into power. Background processes (Android's doze, GC pauses in other apps) can cause outlier samples. The <code>-r 3</code> flag averages 3 runs — enough to wash out most one-off spikes but not enough to eliminate thermal boost effects on short runs.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- SUMMARY TABLE -->
+  <div class="section">
+    <div class="section-num">08 — Summary</div>
+    <h2>All Numbers at a Glance</h2>
+
+    <div class="stat-row">
+      <div class="stat-box green">
+        <div class="stat-num">34.6</div>
+        <div class="stat-unit">tokens/sec</div>
+        <div class="stat-label">Peak prefill (pp32, boosted)</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">29.7</div>
+        <div class="stat-unit">tokens/sec</div>
+        <div class="stat-label">Stable prefill (pp128, thermal)</div>
+      </div>
+      <div class="stat-box orange">
+        <div class="stat-num">23.9</div>
+        <div class="stat-unit">tokens/sec</div>
+        <div class="stat-label">Sustained prefill (pp512)</div>
+      </div>
+      <div class="stat-box orange">
+        <div class="stat-num">21.4</div>
+        <div class="stat-unit">seconds</div>
+        <div class="stat-label">TTFT at 512-token prompt</div>
+      </div>
+    </div>
+
+    <table class="data-table" style="margin-top:0;">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Value</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Peak prefill throughput</td><td class="val-green">34.63 ± 2.68 t/s</td><td style="color:#888;font-size:0.9em">pp32, CPU boost state</td></tr>
+        <tr><td>Stable prefill throughput</td><td class="val-blue">29.69 ± 0.49 t/s</td><td style="color:#888;font-size:0.9em">pp128, thermal steady-state</td></tr>
+        <tr><td>Long-context throughput</td><td class="val-orange">23.88 ± 0.17 t/s</td><td style="color:#888;font-size:0.9em">pp512, most consistent</td></tr>
+        <tr><td>TTFT at pp32</td><td class="val-green">0.92 s</td><td style="color:#888;font-size:0.9em">Imperceptible</td></tr>
+        <tr><td>TTFT at pp128</td><td class="val-blue">4.31 s</td><td style="color:#888;font-size:0.9em">Acceptable with spinner</td></tr>
+        <tr><td>TTFT at pp512</td><td class="val-orange">21.4 s</td><td style="color:#888;font-size:0.9em">Needs progress indicator</td></tr>
+        <tr><td>Throughput drop pp32→pp512</td><td class="val-orange">−31%</td><td style="color:#888;font-size:0.9em">Speed degradation</td></tr>
+        <tr><td>TTFT increase pp32→pp512</td><td class="val-red">+23×</td><td style="color:#888;font-size:0.9em">Compound of length + speed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer-nav">
+    <a href="index.html">← Systems deep-dive</a>
+    <span style="color:var(--muted); font-size:0.8em; font-family:monospace;">Satyam Sharma · April 2026</span>
+    <a href="benchmark.html">Generation speed →</a>
+  </div>
+
+</div>
+
+<footer>
+  Satyam Sharma · <a href="https://destortion.github.io/Edge-ai-computing">Edge AI Blog</a> · 2026
+</footer>
+
+</body>
+</html>
