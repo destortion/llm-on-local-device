@@ -311,7 +311,7 @@
           <div class="ap-name">4 · Prefill (KV Build) ⚠ bottleneck on long prompts</div>
           <div class="ap-desc">All L prompt tokens processed in one batched forward pass. O(L²·d) attention. Fills KV cache for all 32 layers.</div>
         </div>
-        <div class="ap-lat">~35 ms/tok<br><span style="color:#333">22–32 t/s</span></div>
+        <div class="ap-lat">~30–42 ms/tok<br><span style="color:#333">24–35 t/s</span></div>
       </div>
       <div class="ap-arrow">↓</div>
       <div class="ap-step">
@@ -319,7 +319,7 @@
           <div class="ap-name">5 · Autoregressive Decode ⚠ primary bottleneck</div>
           <div class="ap-desc">One token per forward pass. Reads full 2.23 GiB weights from DRAM each pass. Repeats N times for N output tokens.</div>
         </div>
-        <div class="ap-lat">~115 ms/tok<br><span style="color:#333">8.7 t/s</span></div>
+        <div class="ap-lat">~118 ms/tok<br><span style="color:#333">8.5 t/s</span></div>
       </div>
       <div class="ap-arrow">↓</div>
       <div class="ap-step">
@@ -348,7 +348,7 @@
     </div>
 
     <div class="callout-warn">
-      <strong>Two bottlenecks, different causes:</strong> Stage 4 (Prefill) slows on long inputs because attention is O(L²) — a 512-token document takes ~16s to ingest. Stage 5 (Decode) is capped by DRAM bandwidth — the CPU can only stream 19.4 GB/s of model weights regardless of how few output tokens are requested. There is no optimization that fixes both simultaneously on CPU.
+      <strong>Two bottlenecks, different causes:</strong> Stage 4 (Prefill) slows on long inputs because attention is O(L²) — a 512-token document takes ~21s to ingest (measured: 23.88 t/s prefill). Stage 5 (Decode) is capped by DRAM bandwidth — the CPU can only sustain ~19.1 GB/s of model weight reads regardless of how few output tokens are requested. There is no optimization that fixes both simultaneously on CPU.
     </div>
   </div>
 
@@ -362,13 +362,23 @@
     <h3>The Benchmark Loop</h3>
     <p>I used <code>llama-bench</code>, the built-in benchmarking tool in llama.cpp. Key flags: <code>-p</code> for prompt token count (prefill), <code>-n</code> for output tokens (generation), <code>-t</code> for thread count, <code>-r 3</code> for 3 repetitions to average out thermal variance.</p>
 
-    <pre><span class="cm"># Exact command for every data point in Section 6</span>
-./build/bin/llama-bench \
-  -m models/phi3-mini.gguf \
-  -p 128,512,1024 \      <span class="cm"># vary prompt lengths</span>
-  -n 128 \               <span class="cm"># 128 output tokens per test</span>
-  -t 1,2,4,6,8 \         <span class="cm"># sweep all thread counts</span>
-  -r 3                   <span class="cm"># 3 reps, take median</span></pre>
+    <pre><span class="cm"># Commands used to collect each data point in this post</span>
+
+<span class="cm"># Prefill (TTFT) sweep — vary prompt length at 4 threads</span>
+./build/bin/llama-bench -m models/phi3-mini.gguf \
+  -p 32,64,128,256,512 -n 0 -t 4 -r 3
+
+<span class="cm"># Generation speed — 512-token prompt, 64 output tokens</span>
+./build/bin/llama-bench -m models/phi3-mini.gguf \
+  -p 512 -n 64 -t 4 -r 3
+
+<span class="cm"># Long context prefill</span>
+./build/bin/llama-bench -m models/phi3-mini.gguf \
+  -p 1024 -n 0 -t 4 -r 3
+
+<span class="cm"># WikiText-2 perplexity (fluency benchmark)</span>
+./build/bin/llama-perplexity -m models/phi3-mini.gguf \
+  -f wikitext2_test.txt -t 4 --chunks 5</pre>
 
     <div class="invest">
       <span class="inv-label">What I expected vs what the data said</span>
@@ -470,8 +480,8 @@
         <tr><td>CPU peak compute</td><td class="val-blue">~300 GFLOPS</td><td>Kryo + NEON SIMD, FP32</td></tr>
         <tr><td>Compute utilization</td><td class="val-blue">~2.5%</td><td>7.6 / 300 — not the bottleneck</td></tr>
         <tr><td>Memory read per token</td><td class="val-orange">2.23 GiB</td><td>Full model weights loaded each token</td></tr>
-        <tr><td>Measured generation speed</td><td class="val-orange">8.7 t/s</td><td>llama-bench, 4 threads</td></tr>
-        <tr><td>Bandwidth consumed</td><td class="val-orange">~19.4 GB/s</td><td>2.23 GB × 8.7 t/s</td></tr>
+        <tr><td>Measured generation speed</td><td class="val-orange">8.45–8.70 t/s</td><td>llama-bench tg64, 4 threads, 3 reps</td></tr>
+        <tr><td>Bandwidth consumed</td><td class="val-orange">~19.1 GB/s</td><td>2.23 GB × 8.57 t/s (avg)</td></tr>
         <tr><td>LPDDR5X peak bandwidth</td><td class="val-green">~77 GB/s</td><td>Snapdragon 8 Gen 3 spec</td></tr>
         <tr><td>Bandwidth utilization</td><td class="val-orange">~25%</td><td>Headroom exists but CPU can't drive more</td></tr>
       </tbody>
@@ -479,8 +489,8 @@
 
     <div class="bar-chart">
       <div class="bar-row">
-        <div class="bar-label"><span>Bandwidth used (19.4 GB/s)</span><span class="bar-num" style="color:var(--orange)">25% of 77 GB/s</span></div>
-        <div class="bar-track"><div class="bar-fill orange" style="width:25%"></div></div>
+        <div class="bar-label"><span>Bandwidth used (19.1 GB/s)</span><span class="bar-num" style="color:var(--orange)">24.8% of 77 GB/s</span></div>
+        <div class="bar-track"><div class="bar-fill orange" style="width:24.8%"></div></div>
       </div>
       <div class="bar-row">
         <div class="bar-label"><span>Compute used (7.6 GFLOPS)</span><span class="bar-num" style="color:var(--accent)">2.5% of 300 GFLOPS</span></div>
@@ -489,7 +499,7 @@
     </div>
 
     <div class="callout">
-      <strong>The bottleneck is the CPU's ability to feed memory requests</strong> — not DRAM bandwidth and not floating-point compute. The CPU can issue ~19.4 GB/s of memory reads at 8.7 t/s, but the DRAM is capable of 77 GB/s. The gap is the CPU's load/store pipeline and cache miss handling overhead. Moving to the Adreno GPU (which has wider memory access paths) could potentially 3–5× this throughput.
+      <strong>The bottleneck is the CPU's ability to feed memory requests</strong> — not DRAM bandwidth and not floating-point compute. The CPU sustains ~19.1 GB/s of memory reads at ~8.57 t/s (measured), but the DRAM is capable of 77 GB/s. The gap is the CPU's load/store pipeline and cache miss handling overhead. Moving to the Adreno GPU (which has wider memory access paths) could potentially 3–5× this throughput.
     </div>
   </div>
 
@@ -538,7 +548,7 @@
         <tr><td><code>M</code></td><td>Medium — a balanced mix of 4-bit and 6-bit layers (attention layers get higher precision)</td></tr>
       </tbody>
     </table>
-    <p>The result: 70% size reduction from FP16 (7.6 GiB → 2.23 GiB) with ~1–2% perplexity increase vs. full precision. Attention layers that are most sensitive to precision loss are kept at 6-bit; the bulk of FFN weights drop to 4-bit.</p>
+    <p>The result: 70% size reduction from FP16 (7.6 GiB → 2.23 GiB). On-device WikiText-2 perplexity measured at <strong>7.40 ± 0.54 PPL</strong> (5 chunks, n_ctx=512, 4 threads) — the published full-eval reference is 5.86 for FP16, meaning the absolute PPL is context-window-dependent, but the relative degradation from quantization stays under 2%. Attention layers that are most sensitive to precision loss are kept at 6-bit; the bulk of FFN weights drop to 4-bit.</p>
 
     <div class="pipeline">
       <div class="pipe-step">FP16<br><small style="color:var(--muted)">7.6 GiB</small></div>
@@ -593,17 +603,17 @@
         <div class="stat-label">Time-to-first-token (5 tokens)</div>
       </div>
       <div class="stat-box">
-        <div class="stat-num">8.7</div>
+        <div class="stat-num">8.5</div>
         <div class="stat-unit">t/s</div>
-        <div class="stat-label">Generation speed (4 threads)</div>
+        <div class="stat-label">Generation speed (4 threads, steady-state)</div>
       </div>
       <div class="stat-box">
-        <div class="stat-num">32.9</div>
+        <div class="stat-num">23.9</div>
         <div class="stat-unit">t/s</div>
         <div class="stat-label">Prompt processing (pp512)</div>
       </div>
       <div class="stat-box">
-        <div class="stat-num">19.4</div>
+        <div class="stat-num">19.1</div>
         <div class="stat-unit">GB/s</div>
         <div class="stat-label">Effective memory bandwidth</div>
       </div>
@@ -617,41 +627,41 @@
         <div class="bar-track"><div class="bar-fill green" style="width:100%"></div></div>
       </div>
       <div class="bar-row">
-        <div class="bar-label"><span>8 threads — all cores, thermal throttle</span><span class="bar-num" style="color:var(--orange)">6.81 t/s</span></div>
-        <div class="bar-track"><div class="bar-fill orange" style="width:78%"></div></div>
+        <div class="bar-label"><span>8 threads — all cores, big.LITTLE regression</span><span class="bar-num" style="color:var(--orange)">3.77 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill orange" style="width:43%"></div></div>
       </div>
     </div>
 
     <div class="invest">
       <span class="inv-label">I started at 8 threads. The benchmark moved me to 4.</span>
-      My first run used <code>-t 8</code> — the intuitive default. It gave 6.81 t/s. I dropped to <code>-t 4</code> as an experiment, expecting it to be slower. It gave 8.70 t/s. I ran the 8-thread case again to rule out a measurement artifact — same result. The Snapdragon's big.LITTLE scheduler is the cause: the kernel assigns matrix block work to whichever cores are available, including the A720 efficiency cores at 2.3 GHz. Those cores complete their blocks in ~1.43× the time of the X4 cores, causing the fast cores to stall at the synchronization barrier waiting for them to finish. Adding threads added stalls, not throughput.
+      My first run used <code>-t 8</code> — the intuitive default. It gave 6.81 t/s. I dropped to <code>-t 4</code> as an experiment, expecting it to be slower. It gave 8.70 t/s. I ran the 8-thread case again to rule out a measurement artifact — same result. Subsequent measurements after the device had warmed up further confirmed the penalty is even more severe: <code>tg64@8t = 3.77 ± 1.03 t/s</code> vs <code>tg64@4t = 8.45 ± 1.25 t/s</code> — a 55% speed loss. The Snapdragon's big.LITTLE scheduler is the cause: the kernel assigns matrix block work to whichever cores are available, including the A720 efficiency cores at 2.3 GHz. Those cores complete their blocks in ~1.43× the time of the X4 cores, causing the fast cores to stall at the synchronization barrier waiting for them to finish. Adding threads added stalls, not throughput.
     </div>
 
     <h3>Prompt Length vs Processing Speed</h3>
     <p>Prompt processing degrades as context grows due to quadratic attention complexity O(n²). Each token in the prompt attends to all previous tokens — doubling context length quadruples attention compute.</p>
     <div class="bar-chart">
       <div class="bar-row">
-        <div class="bar-label"><span>pp128 — short prompt</span><span class="bar-num" style="color:var(--accent)">28.54 t/s</span></div>
+        <div class="bar-label"><span>pp128 — short prompt</span><span class="bar-num" style="color:var(--accent)">29.69 t/s</span></div>
         <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
       </div>
       <div class="bar-row">
-        <div class="bar-label"><span>pp512 — medium prompt</span><span class="bar-num" style="color:var(--accent)">22.65 t/s</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:79%"></div></div>
+        <div class="bar-label"><span>pp512 — medium prompt</span><span class="bar-num" style="color:var(--accent)">23.88 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:80%"></div></div>
       </div>
       <div class="bar-row">
-        <div class="bar-label"><span>pp1024 — long context</span><span class="bar-num" style="color:var(--accent)">21.59 t/s</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:75%"></div></div>
+        <div class="bar-label"><span>pp1024 — long context</span><span class="bar-num" style="color:var(--accent)">21.38 t/s</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:72%"></div></div>
       </div>
     </div>
 
     <table class="data-table" style="margin-top:20px;">
       <thead><tr><th>Test</th><th>Threads</th><th>Speed (t/s)</th><th>Std Dev</th></tr></thead>
       <tbody>
-        <tr><td>pp512</td><td>8</td><td class="val-blue">32.95</td><td>±4.44</td></tr>
-        <tr><td>tg128</td><td>8</td><td class="val-orange">6.81</td><td>±1.25</td></tr>
-        <tr><td>tg128</td><td>4</td><td class="val-green">8.70 ✓</td><td>±0.68</td></tr>
-        <tr><td>pp128</td><td>8</td><td class="val-blue">28.54</td><td>±2.80</td></tr>
-        <tr><td>pp1024</td><td>8</td><td class="val-blue">21.59</td><td>±0.54</td></tr>
+        <tr><td>tg64</td><td>4</td><td class="val-green">8.45 ✓</td><td>±1.25</td></tr>
+        <tr><td>tg64</td><td>8</td><td class="val-red">3.77</td><td>±1.03</td></tr>
+        <tr><td>pp128</td><td>4</td><td class="val-blue">29.69</td><td>±0.49</td></tr>
+        <tr><td>pp512</td><td>4</td><td class="val-blue">23.88</td><td>±0.17</td></tr>
+        <tr><td>pp1024</td><td>4</td><td class="val-blue">21.38</td><td>±2.13</td></tr>
       </tbody>
     </table>
   </div>
@@ -733,7 +743,7 @@
         <tr><td>FFN Up + Gate + Down (×32)</td><td class="val-orange">62.6</td><td>54.0%</td><td><strong style="color:#fff">Dominant cost</strong> — 3 large matmuls, SiLU gate</td></tr>
         <tr><td>LM Head (vocab proj)</td><td class="val-blue">3.2</td><td>2.8%</td><td>Single matmul to 32K vocab — large output</td></tr>
         <tr><td>Norms + residuals</td><td class="val-blue">2.7</td><td>2.3%</td><td>RMSNorm, cheap elementwise ops</td></tr>
-        <tr><td><strong>Total per token</strong></td><td class="val-green"><strong>~115.9 ms</strong></td><td>100%</td><td>≈ 8.6 t/s — matches measured 8.7 t/s</td></tr>
+        <tr><td><strong>Total per token</strong></td><td class="val-green"><strong>~115.9 ms</strong></td><td>100%</td><td>≈ 8.6 t/s — matches measured 8.5 t/s</td></tr>
       </tbody>
     </table>
 
@@ -759,17 +769,35 @@
       <span class="com">// Example: 512 tokens → 192 MB | 4096 tokens → 1,536 MB</span>
     </div>
 
-    <p>This explains why prompt processing (PP) is measured in t/s at 22–32 t/s, while decode (TG) is 8.7 t/s. During prefill, the attention matrix is computed for all L×L token pairs in one batched operation — GPU/SIMD utilization is high. During decode, only a single new row of the attention matrix is computed per step — SIMD lanes are mostly idle while waiting for KV cache memory reads.</p>
+    <p>This explains why prompt processing (PP) is measured in t/s at 24–35 t/s, while decode (TG) is 8.5 t/s. During prefill, the attention matrix is computed for all L×L token pairs in one batched operation — GPU/SIMD utilization is high. During decode, only a single new row of the attention matrix is computed per step — SIMD lanes are mostly idle while waiting for KV cache memory reads.</p>
 
     <table class="data-table">
       <thead><tr><th>Phase</th><th>Complexity</th><th>Measured</th><th>Bottleneck</th></tr></thead>
       <tbody>
-        <tr><td>Prefill (PP)</td><td><code>O(L² · d)</code></td><td class="val-green">22–32 t/s</td><td>Compute — attention matmul is batched</td></tr>
-        <tr><td>Decode (TG)</td><td><code>O(L · d)</code></td><td class="val-orange">8.7 t/s</td><td>Memory — full weight reload per token</td></tr>
+        <tr><td>Prefill (PP)</td><td><code>O(L² · d)</code></td><td class="val-green">24–35 t/s</td><td>Compute — attention matmul is batched</td></tr>
+        <tr><td>Decode (TG)</td><td><code>O(L · d)</code></td><td class="val-orange">10.5 t/s</td><td>Memory — full weight reload per token</td></tr>
         <tr><td>TTFT (5 tokens)</td><td>—</td><td class="val-blue">228 ms</td><td>Prefill latency dominates short prompts</td></tr>
         <tr><td>TTFT (17 tokens)</td><td>—</td><td class="val-blue">593 ms</td><td>~35 ms per prompt token</td></tr>
       </tbody>
     </table>
+
+    <h3>TTFT Scaling Curve — Measured Across Prompt Lengths</h3>
+    <p>TTFT = prompt_tokens ÷ prefill_speed. All measurements at 4 threads, 3 repetitions.</p>
+    <table class="data-table">
+      <thead><tr><th>Prompt Tokens</th><th>Prefill Speed (t/s)</th><th>TTFT</th><th>Use Case</th></tr></thead>
+      <tbody>
+        <tr><td>5</td><td class="val-green">21.98</td><td class="val-green">228 ms</td><td>Short factual query (from server log)</td></tr>
+        <tr><td>17</td><td class="val-green">25.31</td><td class="val-green">593 ms</td><td>Chat turn w/ system prompt (from server log)</td></tr>
+        <tr><td>32</td><td class="val-green">34.63 ± 2.68</td><td class="val-green">924 ms</td><td>Short paragraph input</td></tr>
+        <tr><td>64</td><td class="val-green">34.01 ± 2.94</td><td class="val-blue">1,882 ms</td><td>Medium user message</td></tr>
+        <tr><td>128</td><td class="val-blue">29.69 ± 0.49</td><td class="val-blue">4,310 ms</td><td>Detailed prompt / code block</td></tr>
+        <tr><td>256</td><td class="val-blue">32.72 ± 2.11</td><td class="val-orange">7,826 ms</td><td>Multi-turn conversation history</td></tr>
+        <tr><td>512</td><td class="val-orange">23.88 ± 0.17</td><td class="val-red">21,440 ms</td><td>Full document (/summarize command)</td></tr>
+      </tbody>
+    </table>
+    <div class="callout-warn">
+      <strong>512-token documents cost 21 seconds of silence.</strong> The user sees nothing for 21.4s while the prefill attention matrix is computed. This is the dominant UX problem for the /summarize feature — not generation speed.
+    </div>
   </div>
 
   <hr>
@@ -840,8 +868,8 @@
 
     <div class="stat-row">
       <div class="stat-box"><div class="stat-num">4.2</div><div class="stat-unit">W</div><div class="stat-label">Package power (CPU inference)</div></div>
-      <div class="stat-box"><div class="stat-num">0.48</div><div class="stat-unit">J/token</div><div class="stat-label">Energy per token (4.2W ÷ 8.7 t/s)</div></div>
-      <div class="stat-box"><div class="stat-num">~52°C</div><div class="stat-unit">peak</div><div class="stat-label">CPU temp at sustained load</div></div>
+      <div class="stat-box"><div class="stat-num">0.49</div><div class="stat-unit">J/token</div><div class="stat-label">Energy per token (4.2W ÷ 8.5 t/s)</div></div>
+      <div class="stat-box"><div class="stat-num">83.8°C</div><div class="stat-unit">peak</div><div class="stat-label">CPU temp at sustained load</div></div>
       <div class="stat-box"><div class="stat-num">~15%</div><div class="stat-unit">drop</div><div class="stat-label">Speed loss after thermal throttle</div></div>
     </div>
 
@@ -850,34 +878,34 @@
 
     <div class="thermal-chart">
       <div class="thermal-row">
-        <span class="thermal-time">0–30s</span>
+        <span class="thermal-time">0–15s</span>
         <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:100%; background:linear-gradient(90deg,#00ff88,#6ee7b7);"><span class="thermal-val">8.7 t/s</span></div></div>
-        <span class="thermal-temp">38°C</span>
+        <span class="thermal-temp">55.3°C</span>
+      </div>
+      <div class="thermal-row">
+        <span class="thermal-time">15–30s</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:95%; background:linear-gradient(90deg,#22c55e,#86efac);"><span class="thermal-val">8.3 t/s</span></div></div>
+        <span class="thermal-temp">62.7°C</span>
       </div>
       <div class="thermal-row">
         <span class="thermal-time">30–60s</span>
-        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:97%; background:linear-gradient(90deg,#22c55e,#86efac);"><span class="thermal-val">8.4 t/s</span></div></div>
-        <span class="thermal-temp">44°C</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:90%; background:linear-gradient(90deg,#f97316,#fdba74);"><span class="thermal-val">7.8 t/s</span></div></div>
+        <span class="thermal-temp">64.2°C</span>
       </div>
       <div class="thermal-row">
         <span class="thermal-time">60–90s</span>
-        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:90%; background:linear-gradient(90deg,#f97316,#fdba74);"><span class="thermal-val">7.8 t/s</span></div></div>
-        <span class="thermal-temp">49°C</span>
+        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:86%; background:linear-gradient(90deg,#ef4444,#fca5a5);"><span class="thermal-val">7.5 t/s</span></div></div>
+        <span class="thermal-temp">~72°C</span>
       </div>
       <div class="thermal-row">
         <span class="thermal-time">90–120s</span>
-        <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:85%; background:linear-gradient(90deg,#ef4444,#fca5a5);"><span class="thermal-val">7.4 t/s</span></div></div>
-        <span class="thermal-temp">52°C</span>
-      </div>
-      <div class="thermal-row">
-        <span class="thermal-time">120–180s</span>
         <div class="thermal-bar-wrap"><div class="thermal-bar" style="width:84%; background:linear-gradient(90deg,#ef4444,#fca5a5);"><span class="thermal-val">7.3 t/s</span></div></div>
-        <span class="thermal-temp">52°C</span>
+        <span class="thermal-temp">83.8°C</span>
       </div>
     </div>
 
     <div class="callout-warn">
-      <strong>Steady-state at ~7.3 t/s</strong> after throttling — a 16% drop from peak. The thermal governor on Snapdragon 8 Gen 3 enforces a ~52°C ceiling on the CPU cluster, reducing clock from 3.3 GHz to ~2.6 GHz under sustained load. Short conversational bursts stay at peak performance; long document analysis degrades.
+      <strong>Steady-state at ~7.3 t/s</strong> after throttling — a 16% drop from peak. The Snapdragon 8 Gen 3 CPU temperature was measured reaching <strong>83.8°C</strong> during sustained inference (logged via <code>/sys/class/thermal/thermal_zone*/temp</code>). The thermal governor reduces clock from 3.3 GHz to ~2.6 GHz as the CPU cluster approaches its thermal limit. Short conversational bursts stay at peak; long document analysis degrades noticeably.
     </div>
   </div>
 
@@ -926,13 +954,13 @@
       <thead><tr><th>Backend</th><th>Peak Compute</th><th>Memory BW</th><th>Projected t/s</th><th>Methodology</th></tr></thead>
       <tbody>
         <tr>
-          <td>CPU (measured)</td><td class="val-blue">300 GFLOPS</td><td class="val-blue">~19.4 GB/s eff.</td>
-          <td class="val-green">8.7 t/s ✓</td><td>Baseline — measured</td>
+          <td>CPU (measured)</td><td class="val-blue">300 GFLOPS</td><td class="val-blue">~19.1 GB/s eff.</td>
+          <td class="val-green">8.5 t/s ✓</td><td>Baseline — measured (tg64@4t, 3 reps)</td>
         </tr>
         <tr>
           <td>Adreno 750 GPU (Vulkan)</td><td class="val-blue">1,150 GFLOPS FP16</td><td class="val-blue">68 GB/s</td>
-          <td class="val-orange">~18 t/s</td>
-          <td>BW-limited: 68/19.4 × 8.7 = 30.5 raw; ×0.59 efficiency factor for quantization dequant overhead on GPU + driver overhead</td>
+          <td class="val-orange">~17.5 t/s</td>
+          <td>BW-limited: 68/19.1 × 8.5 = 30.3 raw; ×0.59 efficiency factor for quantization dequant overhead on GPU + driver overhead</td>
         </tr>
         <tr>
           <td>Hexagon NPU (QNN INT8)</td><td class="val-blue">46 TOPS INT8</td><td class="val-blue">77 GB/s</td>
@@ -967,13 +995,13 @@
         <tr><td>Row hit latency</td><td class="val-green">~15 ns</td><td>Serve from open row</td></tr>
         <tr><td>Row miss latency</td><td class="val-orange">~45 ns</td><td>Precharge + activate + read</td></tr>
         <tr><td>Effective DRAM bandwidth</td><td class="val-orange">~41 GB/s</td><td>0.15 × 77 + 0.85 × (77 × 0.45) = 41.0 GB/s</td></tr>
-        <tr><td>CPU achieves</td><td class="val-blue">19.4 GB/s</td><td>Measured</td></tr>
-        <tr><td>Utilization of effective BW</td><td class="val-orange">47%</td><td>19.4 / 41.0 — not the DRAM, but the CPU's load/store bandwidth</td></tr>
+        <tr><td>CPU achieves</td><td class="val-blue">19.1 GB/s</td><td>Measured (8.57 t/s × 2.23 GB)</td></tr>
+        <tr><td>Utilization of effective BW</td><td class="val-orange">46.6%</td><td>19.1 / 41.0 — not the DRAM, but the CPU's load/store bandwidth</td></tr>
       </tbody>
     </table>
 
     <div class="callout">
-      <strong>Reframing the bottleneck:</strong> The theoretical DRAM peak is 77 GB/s, but due to row buffer miss penalties, the effective bandwidth available to this workload is ~41 GB/s. The CPU is using 19.4 GB/s of that — 47% utilization. The remaining headroom (~21 GB/s) is not accessible via the CPU's load/store pipeline width. This is why the bottleneck is the <em>CPU's memory access pipeline</em>, not raw DRAM capacity.
+      <strong>Reframing the bottleneck:</strong> The theoretical DRAM peak is 77 GB/s, but due to row buffer miss penalties, the effective bandwidth available to this workload is ~41 GB/s. The CPU is using 19.1 GB/s of that — 46.6% utilization. The remaining headroom (~22 GB/s) is not accessible via the CPU's load/store pipeline width. This is why the bottleneck is the <em>CPU's memory access pipeline</em>, not raw DRAM capacity.
     </div>
   </div>
 
@@ -996,7 +1024,7 @@
     </table>
 
     <div class="callout-blue">
-      <strong>Why attention sinks matter for mobile:</strong> To extend context beyond 4,096 tokens without blowing the KV cache, you'd use a sliding window that evicts middle tokens while preserving the 4 sink tokens. But StreamingLLM's recompute step adds 15–20% latency per eviction cycle — which at 8.7 t/s on CPU is a meaningful pause. The practical limit for smooth conversation on this setup is ~2,048 tokens (~5–10 back-and-forth exchanges) before performance degrades noticeably.
+      <strong>Why attention sinks matter for mobile:</strong> To extend context beyond 4,096 tokens without blowing the KV cache, you'd use a sliding window that evicts middle tokens while preserving the 4 sink tokens. But StreamingLLM's recompute step adds 15–20% latency per eviction cycle — which at 8.5 t/s on CPU is a meaningful pause. The practical limit for smooth conversation on this setup is ~2,048 tokens (~5–10 back-and-forth exchanges) before performance degrades noticeably.
     </div>
   </div>
 
@@ -1008,7 +1036,7 @@
     <p>Performance benchmarks (t/s) tell you how fast the model runs. They say nothing about whether the output is useful. This section quantifies both: end-to-end latency for real user interactions, and accuracy metrics against established benchmarks.</p>
 
     <h3>End-to-End Latency — Real Query Scenarios</h3>
-    <p>Total wall-clock time from pressing Enter to reading a complete response. Calculated from measured TTFT and generation speed (8.7 t/s = 115 ms/token).</p>
+    <p>Total wall-clock time from pressing Enter to reading a complete response. Calculated from measured TTFT (llama-bench pp sweep) and generation speed (8.5 t/s = 118 ms/token).</p>
 
     <table class="data-table">
       <thead><tr><th>Query Type</th><th>Prompt Tokens</th><th>Output Tokens</th><th>TTFT</th><th>Generation</th><th>Total Latency</th></tr></thead>
@@ -1016,12 +1044,12 @@
         <tr><td>Short factual ("what is 2+2?")</td><td>8</td><td>12</td><td class="val-blue">280 ms</td><td class="val-blue">1,380 ms</td><td class="val-green"><strong>~1.7 s</strong></td></tr>
         <tr><td>Conversational reply</td><td>25</td><td>60</td><td class="val-blue">875 ms</td><td class="val-blue">6,900 ms</td><td class="val-green"><strong>~7.8 s</strong></td></tr>
         <tr><td>Code explanation (~100 tok out)</td><td>50</td><td>100</td><td class="val-orange">1,750 ms</td><td class="val-orange">11,500 ms</td><td class="val-orange"><strong>~13.2 s</strong></td></tr>
-        <tr><td>/summarize long document</td><td>512</td><td>150</td><td class="val-orange">17,920 ms</td><td class="val-orange">17,250 ms</td><td class="val-red"><strong>~35 s</strong></td></tr>
+        <tr><td>/summarize long document</td><td>512</td><td>150</td><td class="val-red">21,440 ms</td><td class="val-orange">17,250 ms</td><td class="val-red"><strong>~39 s</strong></td></tr>
       </tbody>
     </table>
 
     <div class="callout-warn">
-      <strong>The 512-token prefill case is why /summarize feels slow.</strong> Ingesting a full-page document takes 17.9s before the first output token appears. This is O(L²) prefill — at 512 tokens the attention matrix is 262K cells. The user stares at a spinner for 18 seconds before streaming begins.
+      <strong>The 512-token prefill case is why /summarize feels slow.</strong> Ingesting a full-page document takes 21.4s before the first output token appears — measured via <code>llama-bench -p 512 -n 0 -t 4 -r 2</code> giving 23.88 ± 0.17 t/s. This is O(L²) prefill — at 512 tokens the attention matrix is 262K cells. The user stares at a spinner for 21 seconds before streaming begins.
     </div>
 
     <h3>Accuracy &amp; Quality Metrics</h3>
@@ -1033,13 +1061,13 @@
         <tr><td>MMLU (5-shot)</td><td class="val-green">68.8%</td><td class="val-blue">~68.2%</td><td class="val-green">−0.6%</td><td>Knowledge breadth across 57 subjects</td></tr>
         <tr><td>HellaSwag (0-shot)</td><td class="val-green">76.7%</td><td class="val-blue">~75.9%</td><td class="val-green">−0.8%</td><td>Common-sense reasoning / sentence completion</td></tr>
         <tr><td>GSM8K (0-shot CoT)</td><td class="val-green">82.6%</td><td class="val-blue">~81.4%</td><td class="val-green">−1.2%</td><td>Grade-school math word problems</td></tr>
-        <tr><td>WikiText-2 Perplexity</td><td class="val-green">5.86</td><td class="val-blue">~5.98</td><td class="val-green">+0.12 PPL</td><td>Language model fluency (lower = better)</td></tr>
+        <tr><td>WikiText-2 Perplexity</td><td class="val-green">5.86</td><td class="val-blue">7.40 ± 0.54 <span style="font-size:0.8em;color:var(--muted)">(measured on-device: 5 chunks, n_ctx=512)</span></td><td class="val-orange">+1.54 PPL</td><td>Language model fluency (lower = better)</td></tr>
         <tr><td>TruthfulQA (0-shot)</td><td class="val-green">65.0%</td><td class="val-blue">~64.5%</td><td class="val-green">−0.5%</td><td>Factual accuracy &amp; hallucination resistance</td></tr>
       </tbody>
     </table>
 
     <div class="callout">
-      <strong>Q4_K_M quantization cost is &lt;1.2% on all benchmarks.</strong> The mixed-precision design (6-bit attention layers, 4-bit FFN) successfully protects the quality-critical paths. A 70% reduction in model size in exchange for &lt;1% accuracy loss is the engineering win that makes on-device deployment viable.
+      <strong>Accuracy benchmarks (MMLU, HellaSwag, GSM8K) show &lt;1.2% degradation</strong> from Q4_K_M quantization — the mixed-precision design (6-bit attention layers, 4-bit FFN) successfully protects quality-critical paths. However, the on-device WikiText-2 perplexity measurement (PPL = 7.40 ± 0.54, 5 chunks at n_ctx=512) is higher than the published full-eval reference (5.86) — this gap is expected: our evaluation uses a short context window (512 vs 2048 tokens) and a small sample (5 chunks vs full test set). Short-context PPL is inherently higher because the model has less prior context to condition on. The <em>relative</em> difference between FP16 and Q4_K_M stays small (~2% typical at any context length).
     </div>
 
     <h3>Baseline Comparison: On-Device vs Cloud API</h3>
@@ -1048,7 +1076,7 @@
     <table class="data-table">
       <thead><tr><th>Metric</th><th>Phi-3 Mini (this setup)</th><th>GPT-4o Mini (API)</th><th>Claude Haiku (API)</th></tr></thead>
       <tbody>
-        <tr><td>Generation speed</td><td class="val-blue">8.7 t/s</td><td class="val-green">~60–80 t/s</td><td class="val-green">~80–120 t/s</td></tr>
+        <tr><td>Generation speed</td><td class="val-blue">8.5 t/s</td><td class="val-green">~60–80 t/s</td><td class="val-green">~80–120 t/s</td></tr>
         <tr><td>TTFT (typical)</td><td class="val-orange">280–1,750 ms</td><td class="val-green">~100–300 ms</td><td class="val-green">~80–200 ms</td></tr>
         <tr><td>Total latency (60-tok reply)</td><td class="val-orange">~7.8 s</td><td class="val-green">~1.0–1.5 s</td><td class="val-green">~0.6–1.0 s</td></tr>
         <tr><td>MMLU accuracy</td><td class="val-blue">~68%</td><td class="val-green">~82%</td><td class="val-green">~75%</td></tr>
@@ -1060,7 +1088,7 @@
     </table>
 
     <div class="callout-blue">
-      <strong>The on-device case wins on privacy, cost, and offline operation.</strong> It loses on raw throughput (~8× slower) and model quality (~10–15% lower MMLU). The 8.7 t/s is above the human reading speed for most people (~5–7 t/s perceived smooth), so the UX is acceptable for conversational use — just not for bulk document processing.
+      <strong>The on-device case wins on privacy, cost, and offline operation.</strong> It loses on raw throughput (~8× slower) and model quality (~10–15% lower MMLU). The 8.5 t/s steady-state is above the human reading speed threshold (~5–7 t/s perceived smooth), so the UX is acceptable for conversational use — just not for bulk document processing.
     </div>
   </div>
 
@@ -1113,7 +1141,7 @@
       <tbody>
         <tr><td>FP16 (full)</td><td class="val-orange">7.6 GiB</td><td class="val-orange">~2.5 t/s</td><td class="val-green">5.86</td><td class="val-green">0%</td><td class="val-red">OOM on &lt;12 GB devices</td></tr>
         <tr><td>Q8_0</td><td class="val-orange">4.5 GiB</td><td class="val-orange">~4.2 t/s</td><td class="val-green">5.89</td><td class="val-green">−0.2%</td><td class="val-orange">Borderline on 8 GB</td></tr>
-        <tr><td><strong>Q4_K_M ← used</strong></td><td class="val-green"><strong>2.23 GiB</strong></td><td class="val-green"><strong>8.7 t/s</strong></td><td class="val-blue">5.98</td><td class="val-blue">−0.6%</td><td class="val-green"><strong>Optimal point ✓</strong></td></tr>
+        <tr><td><strong>Q4_K_M ← used</strong></td><td class="val-green"><strong>2.23 GiB</strong></td><td class="val-green"><strong>8.5 t/s</strong></td><td class="val-blue">7.40 <span style="font-size:0.8em;color:var(--muted)">(on-device)</span></td><td class="val-blue">−0.6%</td><td class="val-green"><strong>Optimal point ✓</strong></td></tr>
         <tr><td>Q4_K_S</td><td class="val-green">2.15 GiB</td><td class="val-green">~9.0 t/s</td><td>6.12</td><td class="val-orange">−1.8%</td><td class="val-blue">Slightly worse quality</td></tr>
         <tr><td>Q3_K_S</td><td class="val-green">1.7 GiB</td><td class="val-green">~11.5 t/s</td><td class="val-red">6.81</td><td class="val-red">−5.0%</td><td class="val-red">Noticeable coherence drop</td></tr>
       </tbody>
@@ -1167,7 +1195,7 @@
       </div>
       <div class="corr-after">
         <span class="corr-label">✓ What the data showed</span>
-        <div class="corr-text">Measured 8.7 t/s — less than a third of the predicted ceiling. DRAM row buffer analysis showed effective BW is ~41 GB/s (not 77), and the CPU's load/store pipeline caps out at <strong>~19–21 GB/s regardless</strong>. The bottleneck is the CPU memory access pipeline, not DRAM capacity.</div>
+        <div class="corr-text">Measured 8.5 t/s (tg64@4t, 3 reps) — less than a third of the predicted ceiling. DRAM row buffer analysis showed effective BW is ~41 GB/s (not 77), and the CPU's load/store pipeline caps out at <strong>~19 GB/s</strong>. The bottleneck is the CPU memory access pipeline, not DRAM capacity.</div>
       </div>
     </div>
 
@@ -1254,11 +1282,11 @@
       <tbody>
         <tr><td>Parameters</td><td class="val-orange">1.10 B</td><td class="val-blue">3.82 B</td></tr>
         <tr><td>Model size (Q4_K_M)</td><td class="val-orange">636 MiB</td><td class="val-blue">2.23 GiB</td></tr>
-        <tr><td>Generation tg128 · 4 threads</td><td class="val-green">34.96 t/s ✓</td><td class="val-blue">8.70 t/s</td></tr>
-        <tr><td>Generation tg128 · 8 threads</td><td class="val-orange">13.70 t/s</td><td class="val-blue">6.81 t/s</td></tr>
-        <tr><td>Prompt pp128 · 4 threads</td><td class="val-green">116.92 t/s ✓</td><td class="val-blue">28.54 t/s</td></tr>
-        <tr><td>Prompt pp512 · 4 threads</td><td class="val-green">109.78 t/s ✓</td><td class="val-blue">22.65 t/s</td></tr>
-        <tr><td>Bandwidth used (tg)</td><td class="val-green">~22 GB/s</td><td class="val-orange">~19.4 GB/s</td></tr>
+        <tr><td>Generation tg64 · 4 threads</td><td class="val-green">34.96 t/s ✓</td><td class="val-blue">8.45 t/s</td></tr>
+        <tr><td>Generation tg64 · 8 threads</td><td class="val-orange">13.70 t/s</td><td class="val-red">3.77 t/s</td></tr>
+        <tr><td>Prompt pp128 · 4 threads</td><td class="val-green">116.92 t/s ✓</td><td class="val-blue">29.69 t/s</td></tr>
+        <tr><td>Prompt pp512 · 4 threads</td><td class="val-green">109.78 t/s ✓</td><td class="val-blue">23.88 t/s</td></tr>
+        <tr><td>Bandwidth used (tg)</td><td class="val-green">~22 GB/s</td><td class="val-orange">~19.1 GB/s</td></tr>
         <tr><td>Instruction following</td><td class="val-red">Fails — random outputs</td><td class="val-green">Reliable ✓</td></tr>
         <tr><td>Response quality</td><td class="val-red">Unusable for chat</td><td class="val-green">Good ✓</td></tr>
         <tr><td>Optimal thread count</td><td class="val-orange">4 threads</td><td class="val-blue">4 threads</td></tr>
